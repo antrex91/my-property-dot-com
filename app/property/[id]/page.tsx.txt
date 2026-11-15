@@ -1,0 +1,1 @@
+export default function Page(){ return <div style={{padding:30,fontSize:20}}>Property Details - Working!</div> }
