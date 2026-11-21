@@ -188,6 +188,13 @@ export default function MyOfficePage() {
           🤖 Check My AI Chat Progress →
         </Link>
 
+        {/* ===== AGENT DASHBOARD BUTTON - INSIDE MY-OFFICE, UNDER CHAT PROGRESS ===== */}
+        {/* Click → Goes to /agent-dashboard → Asks for Login Details First → Then Opens Dashboard */}
+        <Link href="/agent-dashboard" className="block text-center bg-[#1e293b] text-white h-[52px] leading-[52px] rounded-full font-black mt-3 shadow-lg border-2 border-yellow-400">
+          🔐 Agent Dashboard →
+        </Link>
+        <p className="text-center text-[11px] text-gray-500 mt-1">Private — Only the owner of this office can login to see earnings & dashboard</p>
+
         {agent.phone && <a href={`tel:${agent.phone}`} className="block text-center bg-green-500 text-white h-[52px] leading-[52px] rounded-full font-black mt-3">📞 Call {agent.name}</a>}
         {agent.whatsapp && <a href={`https://wa.me/${agent.whatsapp}`} target="_blank" className="block text-center bg-[#25D366] text-white h-[52px] leading-[52px] rounded-full font-black mt-3">💬 WhatsApp Me</a>}
 

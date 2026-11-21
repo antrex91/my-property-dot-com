@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabaseClient";
 import Link from "next/link";
 import FeedbackButton from "./components/FeedbackButton";
+import AcquisitionContact from "./components/AcquisitionContact";
 
-const SITE_URL = "https://my-property-dot-com.vercel.app";
+const SITE_URL = "https://mypropertydot.com";
 const NIGERIA_STATES = ["Abia","Adamawa","Akwa Ibom","Anambra","Bauchi","Bayelsa","Benue","Borno","Cross River","Delta","Ebonyi","Edo","Ekiti","Enugu","FCT - Abuja","Gombe","Imo","Jigawa","Kaduna","Kano","Katsina","Kebbi","Kogi","Kwara","Lagos","Nasarawa","Niger","Ogun","Ondo","Osun","Oyo","Plateau","Rivers","Sokoto","Taraba","Yobe","Zamfara"];
 const STATE_COORDS: any = {
   "Abia": {lat:5.4527, lon:7.5248}, "Adamawa": {lat:9.3265, lon:12.3984}, "Akwa Ibom": {lat:4.9057, lon:7.8537}, "Anambra": {lat:6.2209, lon:7.0821},
@@ -50,6 +51,124 @@ function getWeatherIcon(code: number){
   if([71,73,75,77,85,86].includes(code)) return "❄️";
   if([95,96,99].includes(code)) return "⛈️";
   return "☀️";
+}
+function AdEffectLayer({ effect }: { effect: string }) {
+  if(effect === "Sun") return <div className="absolute top-2 right-2 text-[28px] animate-pulse pointer-events-none z-10">☀️</div>;
+  if(effect === "Cloud") return <div className="absolute top-1 left-0 w-full text-[22px] whitespace-nowrap animate-bounce pointer-events-none z-10 overflow-hidden">☁️ ☁️ ☁️ ☁️</div>;
+  if(effect === "Rain") return <div className="absolute top-0 left-0 w-full text-center text-[16px] opacity-70 pointer-events-none z-10">🌧️ 🌧️ 🌧️ 🌧️ 🌧️</div>;
+  if(effect === "Grass") return <div className="absolute bottom-0 left-0 w-full text-center text-[20px] bg-green-600/20 pointer-events-none z-10">🌿🌿🌿🌿🌿🌿🌿</div>;
+  if(effect === "Slides") return <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded-full pointer-events-none z-10">🎞️ Slides</div>;
+  return null;
+}
+function isAdExpired(ad:any){
+  if(!ad.end_date) return false;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return new Date(ad.end_date) < today;
+}
+function RightAdPanel(){
+  const [ads1, setAds1] = useState<any[]>([]);
+  const [ads2, setAds2] = useState<any[]>([]);
+  const [idx1, setIdx1] = useState(0);
+  const [idx2, setIdx2] = useState(0);
+  useEffect(()=>{
+    const loadAds = async () => {
+      try{
+        const { data, error } = await supabase.from("ads").select("*").eq("active", true).order("created_at", {ascending:false});
+        if(!error && data && data.length > 0){
+          const valid = data.filter((a:any)=> !isAdExpired(a) && (a.approval_status || "Approved") === "Approved");
+          const w1 = valid.filter((a:any)=> Number(a.position || 1) === 1);
+          const w2 = valid.filter((a:any)=> Number(a.position || 1) === 2);
+          if(w1.length === 0 && w2.length === 0){
+            setAds1([valid[0]]);
+            setAds2(valid.slice(1).length ? valid.slice(1) : [valid[0]]);
+          } else {
+            setAds1(w1.length ? w1 : [valid[0]]);
+            setAds2(w2.length ? w2 : [valid[0]]);
+          }
+          for(const ad of valid){
+            supabase.from("ads").update({ views: (ad.views || 0) + 1 }).eq("id", ad.id).then(()=>{});
+          }
+          return;
+        }
+      }catch{}
+      try{
+        const saved = localStorage.getItem("ceo_ads_v1") || localStorage.getItem("myproperty_ads") || localStorage.getItem("ads");
+        if(saved){
+          const parsed = JSON.parse(saved);
+          const list = Array.isArray(parsed) ? parsed : (parsed.ads || []);
+          if(list.length){
+            const w1 = list.filter((a:any)=> Number(a.position || 1) === 1);
+            const w2 = list.filter((a:any)=> Number(a.position || 1) === 2);
+            setAds1(w1.length ? w1 : [list[0]]);
+            setAds2(w2.length ? w2 : (list[1] ? [list[1]] : [list[0]]));
+          }
+        }
+      }catch{}
+    };
+    loadAds();
+  },[]);
+  useEffect(()=>{
+    if(ads1.length <= 1) return;
+    const secs = Number(ads1[idx1]?.seconds || ads1[idx1]?.duration || 5);
+    const t = setTimeout(()=> setIdx1((idx1+1)%ads1.length), Math.max(2, secs)*1000);
+    return ()=> clearTimeout(t);
+  },[ads1, idx1]);
+  useEffect(()=>{
+    if(ads2.length <= 1) return;
+    const secs = Number(ads2[idx2]?.seconds || ads2[idx2]?.duration || 5);
+    const t = setTimeout(()=> setIdx2((idx2+1)%ads2.length), Math.max(2, secs)*1000);
+    return ()=> clearTimeout(t);
+  },[ads2, idx2]);
+  const handleAdClick = async (a:any) => {
+    if(!a?.id) return;
+    try{ await supabase.from("ads").update({ clicks: (a.clicks || 0) + 1 }).eq("id", a.id); }catch{}
+  };
+  const renderOne = (a:any, small:boolean) => {
+    if(!a){
+      return (
+        <div className="bg-white rounded-xl overflow-hidden border shadow-sm">
+          <div className="relative">
+            <img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800" className={`w-full object-cover ${small ? "h-[140px]" : "aspect-[4/3]"}`} alt="Advert" />
+            <span className="absolute top-2 left-2 bg-white/90 text-[9px] font-black px-2 py-0.5 rounded-full">AD • SPONSORED</span>
+          </div>
+          <div className="bg-[#15803d] text-white p-3 text-center">
+            <p className="font-black text-[15px] leading-tight">YOUR BUSINESS HERE</p>
+            <p className="text-[11px] mt-1">Best Price in Abuja</p>
+            {!small && <button className="mt-2 border-2 border-white rounded-full px-4 py-1 text-[12px] font-black">Call Now</button>}
+          </div>
+        </div>
+      );
+    }
+    const bg = a.bgColor || a.background || a.bgcolor || "#15803d";
+    const txt = a.textColor || a.text || a.textcolor || "#ffffff";
+    const btnText = a.buttonText || a.buttontext || a.cta || "";
+    const phone = a.phone || "";
+    const link = a.link || "";
+    return (
+      <div className="bg-white rounded-xl overflow-hidden border shadow-sm">
+        <div className="relative">
+          {a.image ? <img src={a.image} className={`w-full object-cover ${small ? "h-[140px]" : "aspect-[4/3]"}`} alt="" /> : null}
+          <span className="absolute top-2 left-2 bg-white/90 text-[9px] font-black px-2 py-0.5 rounded-full">AD • SPONSORED</span>
+          <span className="absolute top-2 right-2 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded-full">{a.seconds || a.duration || 5}s</span>
+          <AdEffectLayer effect={a.adEffect || "None"} />
+        </div>
+        <div className="p-3 text-center" style={{backgroundColor:bg, color:txt}}>
+          <p className="font-black text-[15px] leading-tight">{a.headline || a.title || "YOUR BUSINESS HERE"}</p>
+          <p className="text-[11px] mt-1">{a.subtext || a.subtitle || "Best Price in Abuja"}</p>
+          {btnText && <a onClick={()=>handleAdClick(a)} href={link ? link : (phone ? `tel:${phone}` : "#")} target={link ? "_blank" : undefined} className="inline-block mt-2 border-2 rounded-full px-4 py-1 text-[12px] font-black" style={{borderColor:txt}}>{btnText}</a>}
+        </div>
+      </div>
+    );
+  };
+  const ad = ads1[idx1];
+  const ad2 = ads2[idx2];
+  return (
+    <div className="sticky top-[220px] w-full flex flex-col gap-3">
+      {renderOne(ad, false)}
+      {renderOne(ad2, true)}
+      <p className="text-[10px] text-gray-400 text-center">Sponsored • Ads rotate based on seconds you set in Admin</p>
+    </div>
+  );
 }
 function WeatherBar() {
   const [weather, setWeather] = useState<any[]>([]);
@@ -98,7 +217,7 @@ function WeatherBar() {
           <span className="font-black text-[#fbbf24] text-[14px] tracking-wide whitespace-nowrap">⛅ 36 STATES + FCT LIVE FORECAST:</span>
         </div>
         <div className="flex-1 overflow-hidden">
-          <div className="flex items-center gap-3 w-max" style={{ animation: "smoothMarquee 180s linear infinite" }}>
+          <div className="flex items-center gap-3 w-max" style={{ animation: "smoothMarquee 300s linear infinite" }}>
             {loop.map((w, i) => {
               const isActive = activeState.toLowerCase().includes(w.name.toLowerCase().replace("fct-","")) || w.name.toLowerCase().includes(activeState.toLowerCase().replace("fct-","").replace(" - abuja",""));
               return (<span key={`${w.name}-${i}`} className={`px-4 py-[7px] rounded-full text-[14px] font-extrabold shrink-0 tracking-wide ${isActive? "bg-blue-600 text-white shadow-md" : "bg-[#334155] text-gray-100"}`}>{w.name}: {w.temp}°C {w.todayIcon} Today • Tomorrow {w.tomorrowTemp}°C {w.tomorrowIcon} {isActive? "• You 📍" : ""}</span>);
@@ -106,7 +225,7 @@ function WeatherBar() {
           </div>
         </div>
       </div>
-      <style>{`@keyframes smoothMarquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}} @keyframes newGlow{0%{box-shadow:0 0 0 2px white,0 0 8px rgba(0,0,0,0.9),0 0 12px rgba(255,255,255,0.5)}50%{box-shadow:0 0 0 2px white,0 0 12px rgba(0,0,0,1),0 0 20px rgba(255,255,255,0.9)}100%{box-shadow:0 0 0 2px white,0 0 8px rgba(0,0,0,0.9),0 0 12px rgba(255,255,255,0.5)}}`}</style>
+      <style>{`@keyframes smoothMarquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}} @keyframes earnScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}} @keyframes newGlow{0%{box-shadow:0 0 0 2px white,0 0 8px rgba(0,0,0,0.9),0 0 12px rgba(255,255,255,0.5)}50%{box-shadow:0 0 0 2px white,0 0 12px rgba(0,0,0,1),0 0 20px rgba(255,255,255,0.9)}100%{box-shadow:0 0 0 2px white,0 0 8px rgba(0,0,0,0.9),0 0 12px rgba(255,255,255,0.5)}}`}</style>
     </div>
   );
 }
@@ -121,8 +240,6 @@ function formatTimeAgo(dateStr:string){
   if(hrs<24) return `${hrs}h ago`;
   return `${Math.floor(hrs/24)}d ago`;
 }
-
-// --- FIRST 20 PER STATE - STATIC BONUS (Automated) ---
 function getStateFromAddress(address: any = "") {
   const text = String(address || "").toLowerCase();
   const states = [...NIGERIA_STATES].sort((a,b) => b.length - a.length);
@@ -135,16 +252,10 @@ function getStateFromAddress(address: any = "") {
 async function getStaticBonusMonths(propertyAddress: any) {
   const state = getStateFromAddress(propertyAddress);
   if (!state) return 1;
-  const { count, error } = await supabase
-    .from("properties")
-    .select("*", { count: "exact", head: true })
-    .eq("plan_type", "Static")
-    .eq("plan_state", state)
-    .eq("got_bonus", true);
+  const { count, error } = await supabase.from("properties").select("*", { count: "exact", head: true }).eq("plan_type", "Static").eq("plan_state", state).eq("got_bonus", true);
   if (error) return 1;
   return (count || 0) < 20 ? 2 : 1;
 }
-
 export default function Home() {
   const [properties, setProperties] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -173,10 +284,8 @@ export default function Home() {
   const [videoLikedMap, setVideoLikedMap] = useState<{[k:string]:boolean}>({});
   const [showTerms, setShowTerms] = useState(false);
   const [termsChecked, setTermsChecked] = useState(false);
-
   const bannerEndDate = new Date("2027-01-06");
   const showBanner = new Date() < bannerEndDate;
-
   useEffect(()=>{
     if(typeof window!=="undefined" && "serviceWorker" in navigator){
       navigator.serviceWorker.register("/sw.js").catch(()=>{});
@@ -215,7 +324,6 @@ export default function Home() {
     localStorage.setItem("ceo_terms_accepted","true");
     setShowTerms(false);
   };
-
   useEffect(() => {
     const load = async () => {
       const cachedProps = localStorage.getItem("ceo_properties_cache");
@@ -224,15 +332,17 @@ export default function Home() {
       let propsForLikes: any[] = [];
       if(isCacheValid){ 
         const parsed = JSON.parse(cachedProps!);
-        setProperties(parsed);
-        propsForLikes = parsed;
+        const validCached = parsed.filter((p:any)=> !p.expires_at || new Date(p.expires_at) > new Date());
+        setProperties(validCached);
+        propsForLikes = validCached;
       }
       try {
         const { data } = await supabase.from("properties").select("*").order("id",{ascending:false});
         if(data && data.length){
-          setProperties(data);
-          propsForLikes = data;
-          localStorage.setItem("ceo_properties_cache", JSON.stringify(data));
+          const validProps = data.filter((p:any)=> !p.expires_at || new Date(p.expires_at) > new Date());
+          setProperties(validProps);
+          propsForLikes = validProps;
+          localStorage.setItem("ceo_properties_cache", JSON.stringify(validProps));
           localStorage.setItem("ceo_properties_time", Date.now().toString());
         }
       } catch {}
@@ -255,19 +365,12 @@ export default function Home() {
             const pid = c.property_id;
             const timeAgo = formatTimeAgo(c.created_at);
             const obj = {name:c.name, text:c.text, time: timeAgo};
-            if(pid==="video_feed"){
-              vcoms.push(obj);
-            } else {
-              if(!cmap[pid]) cmap[pid]=[];
-              cmap[pid].push(obj);
-            }
+            if(pid==="video_feed"){ vcoms.push(obj); } else { if(!cmap[pid]) cmap[pid]=[]; cmap[pid].push(obj); }
           });
         }
         setComments(cmap);
         setVideoComments(vcoms);
-      } catch {
-        setComments({});
-      }
+      } catch { setComments({}); }
       try {
         const { data: vlikes } = await supabase.from("video_likes").select("*");
         if(vlikes && vlikes.length){
@@ -279,7 +382,6 @@ export default function Home() {
     };
     load();
   }, []);
-
   const getBeds = (p:any) => { if(p.bedrooms) return Number(p.bedrooms); const m = (p.title||"").match(/(\d+)\s*bed/i); return m ? Number(m[1]) : 0; };
   const getType = (p:any) => { const t = (p.property_type || p.type || p.title || "").toLowerCase(); if(t.includes("land")) return "land"; if(t.includes("carcass") || t.includes("carcase")) return "carcass"; if(t.includes("duplex")) return "duplex"; if(t.includes("flat")) return "flat"; if(t.includes("bungalow")) return "bungalow"; if(t.includes("self")) return "self-contain"; return t; };
   const filtered = properties.filter(p => {
@@ -302,35 +404,21 @@ export default function Home() {
     else if(priceFilter==="Above 350M") priceOk = price>350000000;
     return s && f && typeOk && bedOk && priceOk;
   });
-
   const staticListings = filtered.filter((p:any) => !p.video_url);
   const videoListings = filtered.filter((p:any) => p.video_url);
   const chunks:any[] = [];
   for(let i=0; i<staticListings.length; i+=4){
     const chunkIndex = Math.floor(i / 4);
-    chunks.push({
-      statics: staticListings.slice(i, i+4),
-      video: videoListings[chunkIndex] || null
-    });
+    chunks.push({ statics: staticListings.slice(i, i+4), video: videoListings[chunkIndex] || null });
   }
-  if(staticListings.length === 0 && videoListings.length > 0){
-    videoListings.forEach((v:any) => chunks.push({ statics: [], video: v }));
-  }
-  if(staticListings.length > 0 && videoListings.length > chunks.length){
-    for(let vi = chunks.length; vi < videoListings.length; vi++){
-      chunks.push({ statics: [], video: videoListings[vi] });
-    }
-  }
-
+  if(staticListings.length === 0 && videoListings.length > 0){ videoListings.forEach((v:any) => chunks.push({ statics: [], video: v })); }
+  if(staticListings.length > 0 && videoListings.length > chunks.length){ for(let vi = chunks.length; vi < videoListings.length; vi++){ chunks.push({ statics: [], video: videoListings[vi] }); } }
   const handleLike = async (p:any) => {
     if(!p || p.id == null) return;
     const alreadyLiked = liked[p.id];
     const newLiked = !alreadyLiked;
     setLiked(pr=>({...pr,[p.id]:newLiked}));
-    setLikes(l=>{
-      const current = l[p.id] ?? p.likes_count ?? p.likes ?? 0;
-      return {...l,[p.id]: current + (newLiked ? 1 : -1)};
-    });
+    setLikes(l=>{ const current = l[p.id] ?? p.likes_count ?? p.likes ?? 0; return {...l,[p.id]: current + (newLiked ? 1 : -1)}; });
     try {
       const currentCount = likes[p.id] ?? p.likes_count ?? p.likes ?? 0;
       const newCount = newLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
@@ -344,11 +432,7 @@ export default function Home() {
     const current = videoLikesMap[videoKey] ?? 0;
     const newCount = newLiked ? current + 1 : Math.max(0, current - 1);
     setVideoLikedMap(prev=>({...prev,[videoKey]:newLiked}));
-    setVideoLikesMap(prev=>{
-      const next = {...prev,[videoKey]:newCount};
-      try{ localStorage.setItem("ceo_video_likes_v1", JSON.stringify(next)); }catch{}
-      return next;
-    });
+    setVideoLikesMap(prev=>{ const next = {...prev,[videoKey]:newCount}; try{ localStorage.setItem("ceo_video_likes_v1", JSON.stringify(next)); }catch{} return next; });
     try{ localStorage.setItem("ceo_video_liked_v1", JSON.stringify({...videoLikedMap,[videoKey]:newLiked})); }catch{}
     try {
       const { data: existing } = await supabase.from("video_likes").select("*").eq("video_key", videoKey).single();
@@ -362,7 +446,6 @@ export default function Home() {
     if(navigator.share){ try{ await navigator.share({title:p.title,text,url}); }catch{} }
     else { await navigator.clipboard.writeText(text+" "+url); alert("Link copied ✅"); }
   };
-
   const postComment = async (propId:any) => {
     if(!newComment.trim()) return;
     const pidStr = propId.toString();
@@ -374,37 +457,16 @@ export default function Home() {
       try { await supabase.from("comments").insert({ property_id: "video_feed", name:"You", text:newComment }); } catch {}
       return;
     }
-    setComments(prev=>{
-      const updated = {...prev, [pidStr]:[...(prev[pidStr]||[]), newC]};
-      return updated;
-    });
+    setComments(prev=>{ const updated = {...prev, [pidStr]:[...(prev[pidStr]||[]), newC]}; return updated; });
     const textToSave = newComment;
     setNewComment("");
     setShowPicker(null);
-    try {
-      await supabase.from("comments").insert({ property_id: pidStr, name:"You", text:textToSave });
-    } catch(e){
-      console.log("comment save failed", e);
-    }
+    try { await supabase.from("comments").insert({ property_id: pidStr, name:"You", text:textToSave }); } catch(e){ console.log("comment save failed", e); }
   };
-
   const getImg = (p:any) => p?.images?.[0] || p?.image_url || FALLBACK_IMG;
   const getAllImgs = (p:any) => p?.images?.length? p.images : (p?.image_url? [p.image_url] : [FALLBACK_IMG]);
-  // ===== DESCRIPTION AS LAST SLIDE FOR STATIC =====
-  // Static: pictures + 1 description slide = e.g. 5 pics + description = 6 slides
-  const getTotalSlides = (p:any) => {
-    const imgs = getAllImgs(p);
-    const hasDesc = p?.description && String(p.description).trim().length > 0;
-    const isStatic = !p?.video_url;
-    return isStatic && hasDesc ? imgs.length + 1 : imgs.length;
-  };
-  const isDescSlide = (p:any, idx:number) => {
-    const imgs = getAllImgs(p);
-    const hasDesc = p?.description && String(p.description).trim().length > 0;
-    const isStatic = !p?.video_url;
-    return isStatic && hasDesc && idx === imgs.length;
-  };
-
+  const getTotalSlides = (p:any) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc ? imgs.length + 1 : imgs.length; };
+  const isDescSlide = (p:any, idx:number) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc && idx === imgs.length; };
   return (
     <main className="min-h-screen bg-[#f8f8f8]">
       <WeatherBar />
@@ -427,8 +489,9 @@ export default function Home() {
           </div>
           <Link href="/upload" className="shrink-0 bg-black hover:bg-[#7C3AED] text-white h-[32px] px-4 rounded-full text-[12px] font-black flex items-center justify-center whitespace-nowrap transition">+ Post Property</Link>
         </div>
-        <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-wrap">
-          <div className="relative" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>setShowStates(false)}>
+        {/* ===== FILTER ROW - SAME LEVEL: Filters LEFT, Earn Scrolling RIGHT, A BIT AWAY ===== */}
+        <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-nowrap overflow-hidden">
+          <div className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>setShowStates(false)}>
             <button className="bg-[#f2f2f2] hover:bg-[#e5e5e5] h-[32px] px-4 rounded-lg text-[13px] font-medium flex items-center gap-1">States <span className="text-[10px]">▼</span></button>
             {showStates && (
               <div className="absolute top-[34px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-3 w-[420px] z-50 grid grid-cols-3 gap-1">
@@ -437,7 +500,7 @@ export default function Home() {
               </div>
             )}
           </div>
-          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium">
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Types</option>
             <option value="duplex">Duplex</option>
             <option value="flat">Flat</option>
@@ -446,7 +509,7 @@ export default function Home() {
             <option value="carcass">Carcass</option>
             <option value="self-contain">Self-Contain</option>
           </select>
-          <select value={bedFilter} onChange={e=>setBedFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium">
+          <select value={bedFilter} onChange={e=>setBedFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Beds</option>
             <option value="1">1 Bed</option>
             <option value="2">2 Beds</option>
@@ -454,30 +517,39 @@ export default function Home() {
             <option value="4">4 Beds</option>
             <option value="5+">5+ Beds</option>
           </select>
-          <select value={priceFilter} onChange={e=>setPriceFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium">
+          <select value={priceFilter} onChange={e=>setPriceFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Prices</option>
             <option value="Under 50M">Under ₦50M</option>
             <option value="50M - 100M">₦50M - 100M</option>
             <option value="100M - 350M">₦100M - 350M</option>
             <option value="Above 350M">Above ₦350M</option>
           </select>
-          <span className="text-[11px] text-gray-500 ml-2">Found: {filtered.length} | {filter} | {typeFilter} | {bedFilter} Beds | {priceFilter}</span>
+          {/* EARN SCROLLING - SAME LEVEL, A BIT AWAY FROM FILTERS, ON THE RIGHT - CORRECTED: Level 3 is 3% */}
+          <div className="flex-1 min-w-[200px] ml-6 bg-black rounded-full overflow-hidden whitespace-nowrap h-[32px] flex items-center">
+            <div className="inline-block text-[12px] font-bold tracking-wide" style={{ animation: "earnScroll 60s linear infinite" }}>
+              <span className="mx-6 text-white">🔥 EARN BY INVITING AN AGENT TO THE PLATFORM — GET PAID EVERY FRIDAY 💰</span>
+              <span className="mx-6 text-yellow-400">✦ Earn 10% On Level 1 • 5% On Level 2 • 3% On Level 3 ✦</span>
+              <span className="mx-6 text-white">YOUR LINK = YOUR MONEY — SHARE IT, EARN FOR LIFE 💸</span>
+              <span className="mx-6 text-yellow-400">✦ Terms &amp; Conditions Apply ✦</span>
+              <span className="mx-6 text-white">🔥 EARN BY INVITING AN AGENT TO THE PLATFORM — GET PAID EVERY FRIDAY 💰</span>
+              <span className="mx-6 text-yellow-400">✦ Earn 10% On Level 1 • 5% On Level 2 • 3% On Level 3 ✦</span>
+              <span className="mx-6 text-white">YOUR LINK = YOUR MONEY — SHARE IT, EARN FOR LIFE 💸</span>
+              <span className="mx-6 text-yellow-400">✦ Terms &amp; Conditions Apply ✦</span>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-[1400px] mx-auto px-4 pb-2 flex items-center gap-2">
+          <span className="text-[11px] text-gray-500">Found: {filtered.length} | {filter} | {typeFilter} | {bedFilter} Beds | {priceFilter}</span>
         </div>
       </header>
-
       <div className="max-w-[1400px] mx-auto px-3 pt-3">
         {showBanner && (
           <div className="bg-gradient-to-r from-[#F5F0FF] via-[#D8B4FE] to-[#A78BFA] text-purple-950 border border-purple-200 p-4 rounded-xl text-center font-bold shadow-[0_10px_30px_rgba(139,92,246,0.25)]">
             🎉 LOYALTY REWARD: POST 10 IN 7 DAYS, GET 2 FREE - Ends 6th Jan 2027
-            <p className="text-sm font-normal mt-1">
-              Pay for 10 listings WITHIN 7 DAYS, get FREE 1: 5 Static Sliding Pictures for 2 Weeks + FREE 2: 60 Sec Video for 1 Month.
-              If you exceed 7 days, it will NOT count. 5 Day Free Package still active.
-            </p>
+            <p className="text-sm font-normal mt-1">Pay for 10 listings WITHIN 7 DAYS, get FREE 1: 5 Static Sliding Pictures for 2 Weeks + FREE 2: 60 Sec Video for 1 Month. If you exceed 7 days, it will NOT count. 5 Day Free Package still active.</p>
           </div>
         )}
-        {/* PAYMENT PLANS REMOVED FROM HOMEPAGE - Now on Upload Page */}
       </div>
-
       <div className="max-w-[1400px] mx-auto p-3 space-y-6">
         {chunks.map((chunk:any, gi:number)=>{
           const videoProp = chunk.video;
@@ -509,9 +581,7 @@ export default function Home() {
                     ) : (
                       <img src={imgs[cIdx] || FALLBACK_IMG} onClick={()=>{setSelected(p); setImgIdx(cIdx);}} className="w-full h-full object-cover" onError={(e:any)=> e.target.src=FALLBACK_IMG} alt="" />
                     )}
-                    {showNew && (
-                      <span className="absolute top-2 left-2 bg-black text-white text-[8px] font-black px-2.5 py-0.5 rounded-full z-10 tracking-widest" style={{ animation: "newGlow 1.6s ease-in-out infinite" }}>NEW</span>
-                    )}
+                    {showNew && (<span className="absolute top-2 left-2 bg-black text-white text-[8px] font-black px-2.5 py-0.5 rounded-full z-10 tracking-widest" style={{ animation: "newGlow 1.6s ease-in-out infinite" }}>NEW</span>)}
                     {totalSlides>1 && (
                       <>
                         <button onClick={(e)=>{e.stopPropagation(); setCardSlide(s=>({...s,[p.id]: cIdx===0? totalSlides-1 : cIdx-1}))}} className="absolute left-1 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-full flex items-center justify-center shadow font-bold text-[14px] opacity-0 group-hover:opacity-100 md:opacity-100 transition">‹</button>
@@ -535,11 +605,7 @@ export default function Home() {
                       <button onClick={()=>handleLike(p)} className={`bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium flex items-center gap-1 ${liked[p.id]?"bg-black text-white hover:bg-black":""}`}>👍 {likes[p.id] ?? p.likes_count ?? 0}</button>
                       <button onClick={()=>setActiveCommentId(activeCommentId===p.id?null:p.id)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium">💬 {pComments.length}</button>
                       <button onClick={()=>handleShare(p)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium">↗️ Share</button>
-                      {agentId && (
-                        <Link href={`/my-office/${agentId}`} className="bg-black text-white h-[30px] px-4 rounded-full text-[11px] font-black flex items-center justify-center hover:bg-[#D4AF37] hover:text-black transition border border-black">
-                          My Office
-                        </Link>
-                      )}
+                      {agentId && (<Link href={`/my-office/${agentId}`} className="bg-black text-white h-[30px] px-4 rounded-full text-[11px] font-black flex items-center justify-center hover:bg-[#D4AF37] hover:text-black transition border border-black">My Office</Link>)}
                     </div>
                     {activeCommentId===p.id && (
                       <div className="mt-3 bg-[#f8f8f8] rounded-xl p-2.5">
@@ -557,22 +623,20 @@ export default function Home() {
                     )}
                     <div className="flex gap-2 mt-3">
                       <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.location)}`} target="_blank" className="flex-1 bg-[#f2f2f2] hover:bg-blue-600 hover:text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">Route</a>
-                      {waNumber ? (
-                        <a href={`https://wa.me/${waNumber.replace(/[^0-9]/g,'')}`} target="_blank" className="flex-1 bg-green-500 hover:bg-green-600 text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">WhatsApp</a>
-                      ) : agentId ? (
-                        <Link href={`/my-office/${agentId}`} className="flex-1 bg-[#f2f2f2] hover:bg-black hover:text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">Office</Link>
-                      ) : (
-                        <a href={`https://wa.me/234`} target="_blank" className="flex-1 bg-[#f2f2f2] hover:bg-green-600 hover:text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">WhatsApp</a>
-                      )}
+                      {waNumber ? (<a href={`https://wa.me/${waNumber.replace(/[^0-9]/g,'')}`} target="_blank" className="flex-1 bg-green-500 hover:bg-green-600 text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">WhatsApp</a>) : agentId ? (<Link href={`/my-office/${agentId}`} className="flex-1 bg-[#f2f2f2] hover:bg-black hover:text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">Office</Link>) : (<a href={`https://wa.me/234`} target="_blank" className="flex-1 bg-[#f2f2f2] hover:bg-green-600 hover:text-white h-[32px] rounded-full text-[11px] font-bold flex items-center justify-center transition">WhatsApp</a>)}
                     </div>
                   </div>
                 </div>
               )})}
             </div>
             )}
-
             {videoProp && (
-            <div className="w-full max-w-[800px] mx-auto">
+            <div className="w-full">
+              <div className="flex items-stretch gap-4 justify-center">
+                <div className="hidden lg:flex w-[220px] shrink-0 flex-col justify-end">
+                  <div className="sticky bottom-4"><FeedbackButton variant="inline" /><p className="text-[10px] text-gray-400 text-center mt-1">Report a problem here</p></div>
+                </div>
+                <div className="w-full max-w-[800px] flex-1 min-w-0">
               <div className="w-full">
                 <div className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition">
                   <div className="relative aspect-video bg-black cursor-pointer" onClick={()=>setYoutubeVideo({poster: getImg(videoProp), videoUrl: videoProp?.video_url})}>
@@ -582,10 +646,7 @@ export default function Home() {
                     <button onClick={(e)=>{e.stopPropagation(); setVideoFollowed(!videoFollowed)}} className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-[9px] font-bold shadow transition ${videoFollowed?"bg-white text-black":"bg-[#f2f2f2] hover:bg-blue-600 hover:text-white text-black"}`}>{videoFollowed?"Following ✓":"+ Follow"}</button>
                   </div>
                   <div className="p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[11px] font-black">{videoProp?.agent_name?.[0] || "A"}</div>
-                      <span className="text-[12px] font-black">{videoProp?.agent_name || "Agent"}</span>
-                    </div>
+                    <div className="flex items-center gap-2 mb-2"><div className="w-7 h-7 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[11px] font-black">{videoProp?.agent_name?.[0] || "A"}</div><span className="text-[12px] font-black">{videoProp?.agent_name || "Agent"}</span></div>
                     <h3 className="font-medium text-[13px]">Sponsored Tour - {videoProp?.location}</h3>
                     {videoProp?.description && <p className="text-[11px] text-gray-600 mt-1 line-clamp-2">{videoProp.description}</p>}
                     <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -611,13 +672,16 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+                </div>
+                <div className="hidden lg:block w-[260px] shrink-0"><RightAdPanel /></div>
+              </div>
+              <div className="lg:hidden mt-3 space-y-3"><RightAdPanel /><FeedbackButton variant="inline" /></div>
             </div>
             )}
           </div>
           );
         })}
       </div>
-
       {selected && (
         <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-2 md:p-4" onClick={()=>setSelected(null)}>
           <div className="bg-white rounded-xl max-w-4xl w-full overflow-hidden max-h-[92vh] flex flex-col" onClick={e=>e.stopPropagation()}>
@@ -655,7 +719,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
       {youtubeVideo && (
         <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4" onClick={()=>setYoutubeVideo(null)}>
           <div className="bg-black rounded-xl max-w-3xl w-full overflow-hidden" onClick={e=>e.stopPropagation()}>
@@ -664,7 +727,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
       {showTerms && (
         <div className="fixed inset-0 bg-black/85 z-[300] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-[500px] w-full p-5 max-h-[85vh] overflow-y-auto">
@@ -684,6 +746,10 @@ export default function Home() {
           </div>
         </div>
       )}
+      <div className="max-w-[1400px] mx-auto px-3 md:px-4 pt-3 pb-1">
+        <AcquisitionContact />
+        <p className="text-center text-[10px] text-gray-300 mt-1.5">Or email CEO: <a href="mailto:ceo@mypropertydot.com" className="text-gray-400 underline underline-offset-2">ceo@mypropertydot.com</a></p>
+      </div>
       <footer className="max-w-[1400px] mx-auto px-4 py-6 text-center border-t mt-4">
         <p className="text-[11px] text-gray-500">mypropertydot.com is only a listing platform. We are not liable for stolen / fake property. Always verify client, property, documents & chat before paying.</p>
         <div className="flex justify-center gap-4 mt-2">
@@ -691,8 +757,6 @@ export default function Home() {
           <Link href="/" className="text-[12px] font-bold underline">Homepage</Link>
         </div>
       </footer>
-      <FeedbackButton />
     </main>
   );
-  
-  }
+}

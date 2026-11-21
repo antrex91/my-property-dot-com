@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - AI Ads | mypropertydot.com</title>
+<style>
+  body{font-family:Arial; padding:20px; max-width:920px; margin:auto; background:#F3EAF6}
+  h1{color:#9B7EB8}
+  .card{background:#fff; padding:20px; border-radius:16px; border:2px solid #C8A2C8; margin-bottom:16px}
+  input, select{width:100%; padding:12px; margin:8px 0; border:2px solid #C8A2C8; border-radius:10px; box-sizing:border-box}
+  label{font-weight:700; color:#7A5A9A; display:block; margin-top:10px}
+  .row{display:flex; gap:14px} .row>div{flex:1}
+  @media(max-width:700px){.row{flex-direction:column}}
+  .color-grid{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0}
+  .color-swatch{width:42px; height:42px; border-radius:50%; border:3px solid #fff; cursor:pointer; box-shadow:0 0 0 1px #ddd; position:relative}
+  .color-swatch.selected{box-shadow:0 0 0 3px #9B7EB8; transform:scale(1.1)}
+  .color-swatch.selected::after{content:"✓"; position:absolute; inset:0; display:grid; place-items:center; color:#fff; font-weight:900; text-shadow:0 0 4px #000}
+  .selected-label{font-size:13px; background:#F3EAF6; padding:8px; border-radius:8px}
+  button.main{background:#9B7EB8; color:#fff; border:0; padding:14px; border-radius:12px; width:100%; font-weight:800; font-size:16px; cursor:pointer; margin-top:10px}
+  button.main.green{background:#0F7A3D}
+  #preview{width:100%; max-width:320px; height:440px; margin:16px auto; border:3px solid #C8A2C8; border-radius:16px; overflow:hidden; background:#fff; display:none}
+  #preview img{width:100%; height:58%; object-fit:cover}
+  .saved-item{display:flex; gap:10px; align-items:center; background:#F3EAF6; padding:10px; border-radius:10px; margin-bottom:8px}
+  .saved-item img{width:60px; height:60px; object-fit:cover; border-radius:8px}
+  .saved-item button{background:#ff4444; color:#fff; border:0; padding:6px 10px; border-radius:8px; cursor:pointer}
+</style></head>
+<body>
+<h1>✨ AI Ads Creator - Admin Only</h1>
+<p>Upload picture → Tap Colour → Pick Font → Set Seconds → Generate → Publish</p>
+<div class="card">
+  <label>1. Upload Advertiser Picture</label>
+  <input type="file" id="imgInput" accept="image/*">
+  <label>2. Headline / Company Name</label>
+  <input id="title" placeholder="e.g. Abuja Best Furniture">
+  <label>3. What should it say?</label>
+  <input id="text" placeholder="e.g. 50% Off - Free Delivery in Abuja">
+  <div class="row"><div><label>4. Button Text</label><input id="cta" value="Call Now"></div><div><label>5. Phone / WhatsApp Link</label><input id="link" placeholder="https://wa.me/234... or tel:080..."></div></div>
+  <label>6. HOW MANY SECONDS should this ad stay? - YOU DECIDE</label>
+  <select id="seconds"><option value="3">3 seconds - Quick flash</option><option value="5" selected>5 seconds - Normal</option><option value="8">8 seconds - Longer</option><option value="10">10 seconds - Premium</option><option value="15">15 seconds - VIP</option><option value="30">30 seconds - Super VIP</option></select>
+  <input type="number" id="customSeconds" placeholder="Or type your own seconds here, e.g. 7" min="1" max="60">
+  <div class="row"><div>
+    <label>7. Pick Advertiser Colour - JUST TAP THE COLOUR</label>
+    <div class="color-grid" id="bgColors"></div>
+    <div class="selected-label">Selected Background: <b id="bgSelected">#0F7A3D - Green</b></div>
+    <label>Or pick any custom colour:</label><input type="color" id="bgColorPicker" value="#0F7A3D">
+    <label>Or type exact company colour code:</label><input id="bgHex" placeholder="e.g. #FFCC00 for MTN Yellow">
+  </div><div>
+    <label>8. Pick Text Colour - JUST TAP</label>
+    <div class="color-grid" id="textColors"></div>
+    <div class="selected-label">Selected Text: <b id="textSelected">#FFFFFF - White</b></div>
+    <input type="color" id="textColorPicker" value="#ffffff" style="margin-top:12px">
+    <label>9. Pick FONT STYLE - AI Font</label>
+    <select id="font"><option value="Arial, sans-serif">Modern - Clean & Simple</option><option value="Georgia, serif">Luxury - Classy & Expensive</option><option value="'Arial Black', sans-serif">Bold - Loud & Strong</option><option value="'Brush Script MT', cursive">Fancy - Handwritten</option><option value="'Courier New', monospace">Tech - Modern</option><option value="Impact, sans-serif">Promo - Big Sale Style</option><option value="'Times New Roman', serif">Classic - Newspaper</option></select>
+  </div></div>
+  <button class="main" onclick="generateAd()">✨ AI GENERATE FANCY AD</button>
+</div>
+<div id="preview"></div>
+<button class="main green" id="publishBtn" style="display:none" onclick="publishAd()">✅ PUBLISH TO RIGHT SIDE - LIVE NOW</button>
+<div class="card" style="margin-top:16px"><h3 style="color:#9B7EB8; margin:0">Your Live Ads (Right Side)</h3><div id="savedList"></div><button class="main" style="background:#ff4444" onclick="clearAll()">🗑 Clear All Ads</button></div>
+<script>
+  const bgPresets=[{hex:'#FFCC00',name:'Yellow'},{hex:'#0F7A3D',name:'Green'},{hex:'#6A1B9A',name:'Purple'},{hex:'#E91E63',name:'Pink'},{hex:'#2196F3',name:'Blue'},{hex:'#FF5722',name:'Orange'},{hex:'#FF0000',name:'Red'},{hex:'#000000',name:'Black'},{hex:'#9B7EB8',name:'Lilac'},{hex:'#C8A2C8',name:'Light Lilac'},{hex:'#00BCD4',name:'Cyan'},{hex:'#795548',name:'Brown'},{hex:'#FFD700',name:'Gold'},{hex:'#FFFFFF',name:'White'},{hex:'#FF9800',name:'Deep Orange'}];
+  const textPresets=[{hex:'#FFFFFF',name:'White'},{hex:'#000000',name:'Black'},{hex:'#FFCC00',name:'Yellow'},{hex:'#FF0000',name:'Red'},{hex:'#0F7A3D',name:'Green'},{hex:'#2196F3',name:'Blue'},{hex:'#FFD700',name:'Gold'},{hex:'#C8A2C8',name:'Lilac'}];
+  let selectedBg='#0F7A3D'; let selectedText='#FFFFFF';
+  function buildSwatches(cid, presets, type){ const box=document.getElementById(cid); box.innerHTML=''; presets.forEach(p=>{ const b=document.createElement('div'); b.className='color-swatch'; b.style.background=p.hex; b.title=p.name; if((type==='bg'&&p.hex===selectedBg)||(type==='text'&&p.hex===selectedText)) b.classList.add('selected'); b.onclick=()=>{ if(type==='bg'){ selectedBg=p.hex; document.getElementById('bgColorPicker').value=p.hex; document.getElementById('bgHex').value=p.hex; document.getElementById('bgSelected').textContent=p.hex+' - '+p.name; } else { selectedText=p.hex; document.getElementById('textColorPicker').value=p.hex; document.getElementById('textSelected').textContent=p.hex+' - '+p.name; } buildSwatches('bgColors',bgPresets,'bg'); buildSwatches('textColors',textPresets,'text'); generateAd(); }; box.appendChild(b); }); }
+  buildSwatches('bgColors',bgPresets,'bg'); buildSwatches('textColors',textPresets,'text');
+  document.getElementById('bgColorPicker').oninput=e=>{ selectedBg=e.target.value; document.getElementById('bgHex').value=selectedBg; document.getElementById('bgSelected').textContent=selectedBg+' - Custom'; generateAd(); };
+  document.getElementById('textColorPicker').oninput=e=>{ selectedText=e.target.value; document.getElementById('textSelected').textContent=selectedText+' - Custom'; generateAd(); };
+  document.getElementById('bgHex').oninput=e=>{ if(e.target.value.length===7){ selectedBg=e.target.value; document.getElementById('bgColorPicker').value=selectedBg; } };
+  let imgData=''; document.getElementById('imgInput').onchange=e=>{ const r=new FileReader(); r.onload=()=>{ imgData=r.result; generateAd(); }; r.readAsDataURL(e.target.files[0]); };
+  let currentAd=null;
+  function generateAd(){ const custom=document.getElementById('customSeconds').value; const seconds= custom?parseInt(custom):parseInt(document.getElementById('seconds').value); const bg=document.getElementById('bgHex').value||selectedBg; const tc=selectedText; const font=document.getElementById('font').value; const title=document.getElementById('title').value||'YOUR BUSINESS HERE'; const text=document.getElementById('text').value||'Best Price in Abuja'; const cta=document.getElementById('cta').value||'Call Now'; const link=document.getElementById('link').value||'#'; const img=imgData||'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600'; currentAd={img,title,text,bg,color:tc,font,cta,link,seconds}; const p=document.getElementById('preview'); p.style.display='block'; p.innerHTML=`<div style="background:${bg}; height:100%; text-align:center; color:${tc}"><div style="background:rgba(0,0,0,.5); color:#fff; font-size:11px; padding:6px">AD • Will show for ${seconds} seconds</div><img src="${img}"><div style="padding:12px"><h3 style="font-family:${font}; margin:4px">${title}</h3><p style="font-family:${font}">${text}</p><a href="${link}" style="display:inline-block; padding:10px 18px; background:${bg}; border:2px solid ${tc}; color:${tc}; border-radius:25px; font-weight:800; text-decoration:none; font-family:${font}">${cta}</a><p style="font-size:11px; margin-top:8px">⏱ ${seconds} seconds • Colour: ${bg}</p></div></div>`; document.getElementById('publishBtn').style.display='block'; }
+  function publishAd(){ if(!currentAd) return alert('Generate first'); const ads=JSON.parse(localStorage.getItem('myproperty_ads')||'[]'); ads.push(currentAd); localStorage.setItem('myproperty_ads',JSON.stringify(ads)); renderSaved(); alert('Published! It will show on RIGHT SIDE for '+currentAd.seconds+' seconds.'); }
+  function renderSaved(){ const ads=JSON.parse(localStorage.getItem('myproperty_ads')||'[]'); document.getElementById('savedList').innerHTML= ads.length? ads.map((a,i)=>`<div class="saved-item"><img src="${a.img}"><div style="flex:1"><b style="font-family:${a.font}">${a.title}</b><br><small>${a.seconds}s • ${a.bg}</small></div><button onclick="deleteAd(${i})">Delete</button></div>`).join('') : '<p>No ads yet. Create one above.</p>'; }
+  function deleteAd(i){ const ads=JSON.parse(localStorage.getItem('myproperty_ads')||'[]'); ads.splice(i,1); localStorage.setItem('myproperty_ads',JSON.stringify(ads)); renderSaved(); }
+  function clearAll(){ localStorage.removeItem('myproperty_ads'); renderSaved(); }
+  renderSaved();
+</script>
+</body></html>
