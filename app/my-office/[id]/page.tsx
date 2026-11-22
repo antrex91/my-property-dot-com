@@ -195,6 +195,27 @@ export default function MyOfficePage() {
         </Link>
         <p className="text-center text-[11px] text-gray-500 mt-1">Private — Only the owner of this office can login to see earnings & dashboard</p>
 
+        {/* ===== HOW YOU EARN - 10% / 5% / 3% ===== */}
+        <div className="bg-white rounded-[24px] p-5 mt-4 shadow-sm border-2 border-yellow-300">
+          <p className="text-[11px] tracking-[0.3em] text-purple-500 font-black">💰 HOW YOU EARN — 3 LEVELS</p>
+          <p className="mt-2 text-[14px] leading-relaxed">You earn when your downline <b>subscribes & uploads</b>. You don't have to wait for someone to buy or rent first.</p>
+          <div className="mt-4 space-y-2">
+            <div className="flex justify-between items-center bg-[#F5F0FF] rounded-2xl px-4 py-3">
+              <span className="text-[13px]"><b>Level 1 — 10%</b><br/><span className="text-gray-500 text-[12px]">People you invited directly</span></span>
+              <span className="font-black text-purple-600 text-[16px]">10%</span>
+            </div>
+            <div className="flex justify-between items-center bg-[#F5F0FF] rounded-2xl px-4 py-3">
+              <span className="text-[13px]"><b>Level 2 — 5%</b><br/><span className="text-gray-500 text-[12px]">People they invited</span></span>
+              <span className="font-black text-purple-600 text-[16px]">5%</span>
+            </div>
+            <div className="flex justify-between items-center bg-[#F5F0FF] rounded-2xl px-4 py-3">
+              <span className="text-[13px]"><b>Level 3 — 3%</b><br/><span className="text-gray-500 text-[12px]">People from Level 2</span></span>
+              <span className="font-black text-purple-600 text-[16px]">3%</span>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-3">Static or Video package, same rule. Subscription + Upload = You earn.</p>
+        </div>
+
         {agent.phone && <a href={`tel:${agent.phone}`} className="block text-center bg-green-500 text-white h-[52px] leading-[52px] rounded-full font-black mt-3">📞 Call {agent.name}</a>}
         {agent.whatsapp && <a href={`https://wa.me/${agent.whatsapp}`} target="_blank" className="block text-center bg-[#25D366] text-white h-[52px] leading-[52px] rounded-full font-black mt-3">💬 WhatsApp Me</a>}
 

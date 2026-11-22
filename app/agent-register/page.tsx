@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import Link from "next/link";
 
 const makeCode = (name: string) => {

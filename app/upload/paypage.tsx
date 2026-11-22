@@ -1,5 +1,7 @@
+import { supabase } from "../lib/supabaseClient";
+
 // Call this AFTER Paystack says payment is SUCCESS
-const createCommissions = async (buyerId: string, buyerName: string, buyerPhone: string, packageName: string, packagePrice: number, paymentRef: string) => {
+export const createCommissions = async (buyerId: string, buyerName: string, buyerPhone: string, packageName: string, packagePrice: number, paymentRef: string) => {
   // Get buyer to find his upline
   const { data: buyer } = await supabase.from("agents").select("*").eq("id", buyerId).single();
   if (!buyer || !buyer.referred_by_agent_id) return; // No inviter, no commission
