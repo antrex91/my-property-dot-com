@@ -6,7 +6,7 @@ import Link from "next/link";
 const ADMIN_PASSWORD = "CEO2026";
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"dashboard" | "properties" | "agents" | "feedback">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "properties" | "agents" | "feedback" | "nin">("dashboard");
   const [isAuthed, setIsAuthed] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -26,6 +26,14 @@ export default function AdminPage() {
   const [giveDays, setGiveDays] = useState(5);
   const [giving, setGiving] = useState(false);
   const [freezeReason, setFreezeReason] = useState("");
+
+  // ===== NIN APPROVALS - NEW =====
+  const [ninPending, setNinPending] = useState<any[]>([]);
+  const [ninVerifiedList, setNinVerifiedList] = useState<any[]>([]);
+  const [ninRejectedList, setNinRejectedList] = useState<any[]>([]);
+  const [ninSearch, setNinSearch] = useState("");
+  const [ninLoading, setNinLoading] = useState(false);
+  const [previewImg, setPreviewImg] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("ceo_admin_authed") === "true") setIsAuthed(true);
@@ -54,8 +62,55 @@ export default function AdminPage() {
       setAllAgents(merged);
     } catch {}
     try { const { data } = await supabase.from("free_subscriptions").select("*").order("created_at", { ascending: false }); setFreeSubs(data || []); } catch {}
+
+    // ===== LOAD NIN APPLICATIONS FROM agent_profiles =====
+    try {
+      const { data: ninData } = await supabase.from("agent_profiles").select("*").order("created_at", { ascending: false });
+      if (ninData) {
+        // Only agents who submitted NIN, OR all agents - show pending first
+        const withNin = ninData.filter((a: any) => a.nin_number || a.nin_slip_url || a.verification_status);
+        // If no one has verification_status yet (old agents), show all as pending so you can verify them
+        const listToUse = withNin.length > 0 ? withNin : ninData;
+        setNinPending(listToUse.filter((a: any) => (a.verification_status || "pending").toLowerCase() === "pending"));
+        setNinVerifiedList(listToUse.filter((a: any) => ["approved", "verified"].includes((a.verification_status || "").toLowerCase()) || a.nin_verified === true));
+        setNinRejectedList(listToUse.filter((a: any) => (a.verification_status || "").toLowerCase() === "rejected"));
+      }
+    } catch (e: any) { console.log("NIN load failed - check agent_profiles columns", e.message); }
+
     const baseVisitors = parseInt(localStorage.getItem("site_visitors") || "0") || 0;
     if (baseVisitors === 0) { const calc = supaProps.length + 1; setVisitors(calc); localStorage.setItem("site_visitors", String(calc)); }
+  };
+
+  // ===== APPROVE / REJECT NIN =====
+  const approveNin = async (agent: any) => {
+    if (!confirm(`Approve ${agent.name}?\n\nCheck:\n1. Name on NIN = ${agent.name}?\n2. Face on NIN = Face on selfie?\n\nIf YES, click OK.`)) return;
+    setNinLoading(true);
+    try {
+      const { error } = await supabase.from("agent_profiles").update({ verification_status: "approved", nin_verified: true }).eq("id", agent.id);
+      if (error) throw error;
+      alert(`✅ ${agent.name} is now VERIFIED AGENT. Their My Office will show ✅ VERIFIED AGENT.`);
+      loadAll();
+    } catch (e: any) { alert("Approve failed: " + e.message); }
+    setNinLoading(false);
+  };
+
+  const rejectNin = async (agent: any) => {
+    const reason = prompt(`Why are you rejecting ${agent.name}?\n\nExample: Name does not match NIN, Face does not match, Fake NIN`);
+    if (reason === null) return;
+    setNinLoading(true);
+    try {
+      const { error } = await supabase.from("agent_profiles").update({ verification_status: "rejected", nin_verified: false }).eq("id", agent.id);
+      if (error) throw error;
+      alert(`❌ ${agent.name} rejected. Their My Office will show ❌ NOT VERIFIED.`);
+      loadAll();
+    } catch (e: any) { alert("Reject failed: " + e.message); }
+    setNinLoading(false);
+  };
+
+  const unverifyNin = async (agent: any) => {
+    if (!confirm(`Move ${agent.name} back to PENDING?`)) return;
+    await supabase.from("agent_profiles").update({ verification_status: "pending", nin_verified: false }).eq("id", agent.id);
+    loadAll();
   };
 
   const searchAgent = async () => {
@@ -117,6 +172,8 @@ export default function AdminPage() {
   const isExpired = (s: any) => new Date(s.end_date) < new Date() || s.status === "cancelled";
   const daysLeft = (s: any) => Math.max(0, Math.ceil((new Date(s.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 
+  const filteredNinPending = ninPending.filter((a: any) => `${a.name || ""} ${a.phone || ""} ${a.nin_number || ""}`.toLowerCase().includes(ninSearch.toLowerCase()));
+
   if (authChecked && !isAuthed) {
     return (
       <div style={{ padding: "20px", fontFamily: "sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -147,11 +204,99 @@ export default function AdminPage() {
           <div style={{ fontSize: "22px" }}>→</div>
         </div>
       </Link>
+
+      {/* ===== BIG NIN BUTTON - CLICK TO ENTER NIN APPROVAL ROOM ===== */}
+      <button onClick={() => setTab("nin")} style={{ display: "block", width: "100%", background: tab === "nin" ? "#16a34a" : "#fef3c7", color: tab === "nin" ? "white" : "#92400e", padding: "18px", borderRadius: "14px", marginTop: "16px", border: tab === "nin" ? "2px solid #16a34a" : "2px solid #fbbf24", cursor: "pointer", textAlign: "left", boxShadow: "0 8px 20px rgba(251,191,36,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+          <div>
+            <div style={{ fontWeight: "bold", fontSize: "17px" }}>🛡️ NIN Approvals → Click Here To Verify Agents</div>
+            <div style={{ fontSize: "13px", marginTop: "4px" }}>See NIN number + NIN slip photo + Selfie holding NIN + Agent photo. Approve or Reject here.</div>
+            <div style={{ fontSize: "12px", marginTop: "6px", fontWeight: "bold" }}>⏳ {ninPending.length} Pending • ✅ {ninVerifiedList.length} Verified • ❌ {ninRejectedList.length} Rejected</div>
+          </div>
+          <div style={{ fontSize: "24px" }}>→</div>
+        </div>
+      </button>
+
       <div style={{ display: "flex", gap: "8px", marginTop: "18px", flexWrap: "wrap" }}>
-        {([["dashboard", "📊 Dashboard"], ["properties", `🏠 Properties (${pending.length + verified.length})`], ["agents", `👥 Agents & Free Sub (${allAgents.length})`], ["feedback", `💬 Feedback (${feedbacks.filter((f: any) => f.status !== "fixed").length} new)`]] as any).map(([key, label]: any) => (
+        {([["dashboard", "📊 Dashboard"], ["properties", `🏠 Properties (${pending.length + verified.length})`], ["agents", `👥 Agents & Free Sub (${allAgents.length})`], ["nin", `🛡️ NIN Approvals (${ninPending.length})`], ["feedback", `💬 Feedback (${feedbacks.filter((f: any) => f.status !== "fixed").length} new)`]] as any).map(([key, label]: any) => (
           <button key={key} onClick={() => setTab(key)} style={{ background: tab === key ? "black" : "white", color: tab === key ? "white" : "black", padding: "10px 16px", borderRadius: "999px", border: "1px solid #e2e8f0", fontWeight: "bold", fontSize: "13px", cursor: "pointer" }}>{label}</button>
         ))}
       </div>
+
+      {tab === "nin" && (
+        <>
+          <div style={{ background: "#fef3c7", border: "2px solid #fbbf24", padding: "16px", borderRadius: "12px", marginTop: "20px" }}>
+            <b style={{ fontSize: "16px" }}>🛡️ NIN Verification Room — CEO ONLY</b>
+            <p style={{ fontSize: "13px", marginTop: "6px", lineHeight: "1.6" }}>How to check:<br/>1. Compare <b>Name</b> they typed vs <b>Name on NIN slip</b> — must match.<br/>2. Compare <b>Face on NIN slip</b> vs <b>Selfie holding NIN</b> vs <b>Profile photo</b> — must be same person.<br/>3. If YES → Approve. If NO → Reject.<br/><span style={{ color: "#dc2626", fontWeight: "bold" }}>⚠️ Never share NIN numbers with anyone. Only you see this page.</span></p>
+            <input value={ninSearch} onChange={(e) => setNinSearch(e.target.value)} placeholder="Search by name, phone or NIN..." style={{ width: "100%", padding: "12px", borderRadius: "999px", border: "1px solid #fbbf24", marginTop: "12px", outline: "none", boxSizing: "border-box" }} />
+          </div>
+
+          <h2 style={{ marginTop: "22px", fontSize: "20px", fontWeight: "bold" }}>⏳ Pending NIN Approvals ({filteredNinPending.length})</h2>
+          {filteredNinPending.length === 0 && <p style={{ background: "white", padding: "16px", borderRadius: "12px", color: "#94a3b8", marginTop: "10px" }}>No pending NIN applications. When an agent signs up with NIN, they will appear here.</p>}
+          <div style={{ display: "grid", gap: "16px", marginTop: "12px" }}>
+            {filteredNinPending.map((a: any) => (
+              <div key={a.id} style={{ background: "white", border: "2px solid #fbbf24", borderRadius: "16px", padding: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", flexWrap: "wrap" }}>
+                  <div>
+                    <b style={{ fontSize: "17px" }}>{a.name || "Agent"}</b>
+                    <p style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>📞 {a.phone || "No phone"} • ✉️ {a.email || ""}</p>
+                    <p style={{ fontSize: "13px", marginTop: "4px" }}>🪪 <b>NIN Number (CEO ONLY):</b> <span style={{ background: "#fef3c7", padding: "2px 8px", borderRadius: "6px", fontWeight: "bold", letterSpacing: "1px" }}>{a.nin_number || "No NIN submitted"}</span></p>
+                    <p style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>Applied: {a.created_at ? new Date(a.created_at).toLocaleString() : ""} • ID: {String(a.id).slice(0, 8)}...</p>
+                    {a.why_deal && <p style={{ fontSize: "13px", marginTop: "8px", background: "#f8fafc", padding: "10px", borderRadius: "10px" }}><b>Why deal with me:</b> {a.why_deal}</p>}
+                  </div>
+                  <Link href={`/my-office/${a.id}`} target="_blank" style={{ background: "#f1f5f9", padding: "8px 14px", borderRadius: "999px", fontSize: "12px", fontWeight: "bold", textDecoration: "none", color: "black" }}>View My Office →</Link>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginTop: "14px" }}>
+                  <div>
+                    <p style={{ fontSize: "11px", fontWeight: "bold", textAlign: "center", marginBottom: "6px" }}>1. AGENT PROFILE PHOTO</p>
+                    {a.avatar_url ? <img src={a.avatar_url} onClick={() => setPreviewImg(a.avatar_url)} style={{ width: "100%", height: "160px", objectFit: "cover", borderRadius: "12px", cursor: "pointer", border: "2px solid #e2e8f0" }} alt="Agent" /> : <div style={{ width: "100%", height: "160px", background: "#f1f5f9", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "40px" }}>👤</div>}
+                    <p style={{ fontSize: "11px", textAlign: "center", color: "#64748b", marginTop: "4px" }}>Tap to enlarge</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "11px", fontWeight: "bold", textAlign: "center", marginBottom: "6px" }}>2. NIN SLIP / CARD PHOTO</p>
+                    {a.nin_slip_url ? <img src={a.nin_slip_url} onClick={() => setPreviewImg(a.nin_slip_url)} style={{ width: "100%", height: "160px", objectFit: "cover", borderRadius: "12px", cursor: "pointer", border: "2px solid #fbbf24" }} alt="NIN Slip" /> : <div style={{ width: "100%", height: "160px", background: "#fef3c7", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: "12px", padding: "10px" }}>No NIN slip uploaded</div>}
+                    <p style={{ fontSize: "11px", textAlign: "center", color: "#64748b", marginTop: "4px" }}>Check name + face on NIN</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: "11px", fontWeight: "bold", textAlign: "center", marginBottom: "6px" }}>3. SELFIE HOLDING NIN</p>
+                    {a.nin_selfie_url ? <img src={a.nin_selfie_url} onClick={() => setPreviewImg(a.nin_selfie_url)} style={{ width: "100%", height: "160px", objectFit: "cover", borderRadius: "12px", cursor: "pointer", border: "2px solid #16a34a" }} alt="Selfie holding NIN" /> : <div style={{ width: "100%", height: "160px", background: "#dcfce7", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: "12px", padding: "10px" }}>No selfie uploaded</div>}
+                    <p style={{ fontSize: "11px", textAlign: "center", color: "#64748b", marginTop: "4px" }}>Must be same face</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                  <button onClick={() => approveNin(a)} disabled={ninLoading} style={{ flex: 1, background: "#16a34a", color: "white", padding: "14px", border: "none", borderRadius: "999px", fontWeight: "bold", cursor: "pointer", fontSize: "14px" }}>✅ APPROVE — Face + Name Match</button>
+                  <button onClick={() => rejectNin(a)} disabled={ninLoading} style={{ flex: 1, background: "#dc2626", color: "white", padding: "14px", border: "none", borderRadius: "999px", fontWeight: "bold", cursor: "pointer", fontSize: "14px" }}>❌ REJECT — Does Not Match</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h2 style={{ marginTop: "30px", fontSize: "18px", fontWeight: "bold" }}>✅ Verified Agents ({ninVerifiedList.length})</h2>
+          <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+            {ninVerifiedList.map((a: any) => (
+              <div key={a.id} style={{ background: "white", padding: "12px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid #16a34a" }}>
+                <span><b>{a.name}</b> — {a.phone} • NIN ****{a.nin_last4 || (a.nin_number ? String(a.nin_number).slice(-4) : "")} • ✅ VERIFIED</span>
+                <button onClick={() => unverifyNin(a)} style={{ background: "#f1f5f9", padding: "6px 12px", border: "none", borderRadius: "999px", fontWeight: "bold", cursor: "pointer", fontSize: "11px" }}>Move to Pending</button>
+              </div>
+            ))}
+            {ninVerifiedList.length === 0 && <p style={{ background: "white", padding: "14px", borderRadius: "12px", color: "#94a3b8" }}>No verified agents yet.</p>}
+          </div>
+
+          <h2 style={{ marginTop: "22px", fontSize: "18px", fontWeight: "bold" }}>❌ Rejected Agents ({ninRejectedList.length})</h2>
+          <div style={{ display: "grid", gap: "8px", marginTop: "10px" }}>
+            {ninRejectedList.map((a: any) => (
+              <div key={a.id} style={{ background: "white", padding: "12px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid #dc2626" }}>
+                <span><b>{a.name}</b> — {a.phone} • ❌ REJECTED</span>
+                <button onClick={() => unverifyNin(a)} style={{ background: "#f1f5f9", padding: "6px 12px", border: "none", borderRadius: "999px", fontWeight: "bold", cursor: "pointer", fontSize: "11px" }}>Move to Pending</button>
+              </div>
+            ))}
+            {ninRejectedList.length === 0 && <p style={{ background: "white", padding: "14px", borderRadius: "12px", color: "#94a3b8" }}>No rejected agents.</p>}
+          </div>
+        </>
+      )}
+
       {tab === "dashboard" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "15px", marginTop: "25px" }}>
@@ -168,6 +313,10 @@ export default function AdminPage() {
                 <span><b>{s.email}</b> — {s.plan}</span><span>{isExpired(s) ? "❌ Expired" : `⏳ ${daysLeft(s)} days left • Ends ${new Date(s.end_date).toLocaleDateString()}`}</span>
               </div>
             ))}
+          </div>
+          <div style={{ background: "#fef3c7", border: "2px solid #fbbf24", padding: "16px", borderRadius: "12px", marginTop: "18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div><b>🛡️ NIN Pending: {ninPending.length}</b><p style={{ fontSize: "12px", margin: "4px 0 0" }}>Agents waiting for your NIN approval.</p></div>
+            <button onClick={() => setTab("nin")} style={{ background: "black", color: "white", padding: "10px 18px", border: "none", borderRadius: "999px", fontWeight: "bold", cursor: "pointer" }}>Open NIN Room →</button>
           </div>
         </>
       )}
@@ -262,6 +411,17 @@ export default function AdminPage() {
             {feedbacks.length === 0 && <p style={{ background: "white", padding: "14px", borderRadius: "12px", color: "#94a3b8" }}>No feedback yet. Good!</p>}
           </div>
         </>
+      )}
+
+      {/* Full-screen image preview */}
+      {previewImg && (
+        <div onClick={() => setPreviewImg(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
+            <img src={previewImg} style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: "12px", objectFit: "contain" }} alt="Preview" />
+            <button onClick={() => setPreviewImg(null)} style={{ position: "absolute", top: "-10px", right: "-10px", background: "white", width: "36px", height: "36px", borderRadius: "50%", border: "none", fontWeight: "bold", cursor: "pointer" }}>✕</button>
+            <p style={{ color: "white", textAlign: "center", marginTop: "10px", fontSize: "12px" }}>Tap anywhere to close</p>
+          </div>
+        </div>
       )}
     </div>
   );

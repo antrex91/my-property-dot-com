@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import Link from "next/link";
 import FeedbackButton from "./components/FeedbackButton";
@@ -126,7 +126,7 @@ function RightAdPanel(){
   const renderOne = (a:any, small:boolean) => {
     if(!a){
       return (
-        <div className="bg-white rounded-xl overflow-hidden border shadow-sm">
+        <div className="bg-white rounded-xl overflow-hidden border shadow-sm w-full">
           <div className="relative">
             <img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800" className={`w-full object-cover ${small ? "h-[140px]" : "aspect-[4/3]"}`} alt="Advert" />
             <span className="absolute top-2 left-2 bg-white/90 text-[9px] font-black px-2 py-0.5 rounded-full">AD • SPONSORED</span>
@@ -145,7 +145,7 @@ function RightAdPanel(){
     const phone = a.phone || "";
     const link = a.link || "";
     return (
-      <div className="bg-white rounded-xl overflow-hidden border shadow-sm">
+      <div className="bg-white rounded-xl overflow-hidden border shadow-sm w-full">
         <div className="relative">
           {a.image ? <img src={a.image} className={`w-full object-cover ${small ? "h-[140px]" : "aspect-[4/3]"}`} alt="" /> : null}
           <span className="absolute top-2 left-2 bg-white/90 text-[9px] font-black px-2 py-0.5 rounded-full">AD • SPONSORED</span>
@@ -163,7 +163,7 @@ function RightAdPanel(){
   const ad = ads1[idx1];
   const ad2 = ads2[idx2];
   return (
-    <div className="sticky top-[220px] w-full flex flex-col gap-3">
+    <div className="lg:sticky lg:top-[220px] w-full flex flex-col gap-3">
       {renderOne(ad, false)}
       {renderOne(ad2, true)}
       <p className="text-[10px] text-gray-400 text-center">Sponsored • Ads rotate based on seconds you set in Admin</p>
@@ -211,16 +211,16 @@ function WeatherBar() {
   }, []);
   const loop = [...weather,...weather,...weather,...weather];
   return (
-    <div className="sticky top-0 z-50 bg-[#1e293b] overflow-hidden shadow-md">
-      <div className="flex items-center h-[52px]">
-        <div className="bg-[#1e293b] z-10 flex items-center px-4 h-full shrink-0 border-r border-gray-600">
-          <span className="font-black text-[#fbbf24] text-[14px] tracking-wide whitespace-nowrap">⛅ 36 STATES + FCT LIVE FORECAST:</span>
+    <div className="sticky top-0 z-50 bg-[#1e293b] overflow-hidden shadow-md w-full max-w-full">
+      <div className="flex items-center h-[44px] sm:h-[52px] w-full max-w-full">
+        <div className="bg-[#1e293b] z-10 flex items-center px-2 sm:px-4 h-full shrink-0 border-r border-gray-600">
+          <span className="font-black text-[#fbbf24] text-[11px] sm:text-[14px] tracking-wide whitespace-nowrap">⛅ <span className="hidden sm:inline">36 STATES + FCT LIVE FORECAST:</span><span className="sm:hidden">FORECAST:</span></span>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <div className="flex items-center gap-3 w-max" style={{ animation: "smoothMarquee 300s linear infinite" }}>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-3 w-max" style={{ animation: "smoothMarquee 300s linear infinite" }}>
             {loop.map((w, i) => {
               const isActive = activeState.toLowerCase().includes(w.name.toLowerCase().replace("fct-","")) || w.name.toLowerCase().includes(activeState.toLowerCase().replace("fct-","").replace(" - abuja",""));
-              return (<span key={`${w.name}-${i}`} className={`px-4 py-[7px] rounded-full text-[14px] font-extrabold shrink-0 tracking-wide ${isActive? "bg-blue-600 text-white shadow-md" : "bg-[#334155] text-gray-100"}`}>{w.name}: {w.temp}°C {w.todayIcon} Today • Tomorrow {w.tomorrowTemp}°C {w.tomorrowIcon} {isActive? "• You 📍" : ""}</span>);
+              return (<span key={`${w.name}-${i}`} className={`px-3 sm:px-4 py-[7px] rounded-full text-[12px] sm:text-[14px] font-extrabold shrink-0 tracking-wide whitespace-nowrap ${isActive? "bg-blue-600 text-white shadow-md" : "bg-[#334155] text-gray-100"}`}>{w.name}: {w.temp}°C {w.todayIcon} Today • Tomorrow {w.tomorrowTemp}°C {w.tomorrowIcon} {isActive? "• You 📍" : ""}</span>);
             })}
           </div>
         </div>
@@ -264,6 +264,9 @@ export default function Home() {
   const [bedFilter, setBedFilter] = useState("All");
   const [priceFilter, setPriceFilter] = useState("All");
   const [showStates, setShowStates] = useState(false);
+  const [statesPinned, setStatesPinned] = useState(false);
+  const [stateSearch, setStateSearch] = useState("");
+  const statesRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<any>(null);
   const [imgIdx, setImgIdx] = useState(0);
   const [activeCommentId, setActiveCommentId] = useState<any>(null);
@@ -286,6 +289,22 @@ export default function Home() {
   const [termsChecked, setTermsChecked] = useState(false);
   const bannerEndDate = new Date("2027-01-06");
   const showBanner = new Date() < bannerEndDate;
+
+  useEffect(()=>{
+    if(!showStates) return;
+    const onClick = (e:any)=>{
+      if(statesRef.current && !statesRef.current.contains(e.target)){
+        setShowStates(false);
+        setStatesPinned(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("touchstart", onClick);
+    return ()=>{ document.removeEventListener("mousedown", onClick); document.removeEventListener("touchstart", onClick); };
+  },[showStates]);
+
+  const filteredStates = NIGERIA_STATES.filter(st => st.toLowerCase().includes(stateSearch.toLowerCase()));
+
   useEffect(()=>{
     if(typeof window!=="undefined" && "serviceWorker" in navigator){
       navigator.serviceWorker.register("/sw.js").catch(()=>{});
@@ -468,39 +487,60 @@ export default function Home() {
   const getTotalSlides = (p:any) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc ? imgs.length + 1 : imgs.length; };
   const isDescSlide = (p:any, idx:number) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc && idx === imgs.length; };
   return (
-    <main className="min-h-screen bg-[#f8f8f8]">
+    <main className="min-h-screen bg-[#f8f8f8] w-full max-w-full overflow-x-hidden">
       <WeatherBar />
-      <header className="bg-white sticky top-[52px] z-40 shadow-sm">
-        <div className="max-w-[1400px] mx-auto px-4 py-2 flex items-center gap-3">
-          <Link href="/" className="shrink-0 flex items-center">
-            <img src="/logo.png" alt="mypropertydot.com - Two hands giving you any property" className="h-[115px] w-auto max-w-[300px] md:max-w-[380px] object-contain" />
-          </Link>
-          <div className="flex-1 flex justify-center">
-            <div className="flex items-center gap-2 w-full max-w-[600px]">
-              <div className="flex-1 bg-[#f2f2f2] rounded-full px-4 h-[32px] flex items-center"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agent, place, estate, land, carcass, 2 bed..." className="flex-1 bg-transparent text-[13px] outline-none" /></div>
-              <button className="bg-blue-600 hover:bg-blue-700 text-white h-[32px] px-5 rounded-full text-[12px] font-bold">Search</button>
-              <button onClick={subscribePush} className={`h-[32px] px-4 rounded-full text-[11px] font-bold whitespace-nowrap transition ${pushSubscribed?"bg-green-600 text-white":"bg-black text-white hover:bg-gray-800"}`}>{pushSubscribed?"🔔 Alerts ON":"🔔 Get Alerts"}</button>
+      {/* ===== HEADER - MOBILE FIRST LIKE YOUTUBE ===== */}
+      <header className="bg-white sticky top-[44px] sm:top-[52px] z-40 shadow-sm overflow-visible w-full max-w-full">
+        <div className="max-w-[1400px] mx-auto px-2 sm:px-4 py-2 w-full">
+          {/* ROW 1 - PHONE: Logo + Login + Post | LAPTOP: same row */}
+          <div className="flex items-center gap-2 w-full min-w-0">
+            <Link href="/" className="shrink-0 flex items-center min-w-0">
+              <img src="/logo.png" alt="mypropertydot.com" className="h-[48px] sm:h-[80px] lg:h-[115px] w-auto max-w-[150px] sm:max-w-[300px] lg:max-w-[380px] object-contain" />
+            </Link>
+            <div className="flex-1 min-w-0 hidden md:block">
+              <div className="flex items-center gap-2 w-full max-w-[600px] mx-auto">
+                <div className="flex-1 min-w-0 bg-[#f2f2f2] rounded-full px-4 h-[32px] flex items-center"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agent, place, estate, land, carcass, 2 bed..." className="flex-1 min-w-0 bg-transparent text-[13px] outline-none" /></div>
+                <button className="bg-blue-600 hover:bg-blue-700 text-white h-[32px] px-5 rounded-full text-[12px] font-bold shrink-0">Search</button>
+                <button onClick={subscribePush} className={`h-[32px] px-4 rounded-full text-[11px] font-bold whitespace-nowrap transition shrink-0 ${pushSubscribed?"bg-green-600 text-white":"bg-black text-white hover:bg-gray-800"}`}>{pushSubscribed?"🔔 Alerts ON":"🔔 Get Alerts"}</button>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center gap-1.5 text-[13px] font-black text-black whitespace-nowrap shrink-0 leading-none">
+              <Link href="/login" className="hover:underline leading-none">Log In</Link>
+              <span className="font-black leading-none text-[13px]">|</span>
+              <Link href="/signup" className="hover:underline leading-none">Sign Up</Link>
+            </div>
+            <Link href="/upload" className="shrink-0 bg-black hover:bg-[#7C3AED] text-white h-[32px] px-3 sm:px-4 rounded-full text-[11px] sm:text-[12px] font-black flex items-center justify-center whitespace-nowrap transition">+ Post Property</Link>
+            <div className="flex md:hidden items-center gap-1 shrink-0">
+              <Link href="/login" className="text-[11px] font-bold px-1 whitespace-nowrap">Log In</Link>
+              <Link href="/signup" className="text-[11px] font-bold px-1 whitespace-nowrap">Sign Up</Link>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-1.5 text-[13px] font-black text-black whitespace-nowrap shrink-0 leading-none">
-            <Link href="/login" className="hover:underline leading-none">Log In</Link>
-            <span className="font-black leading-none text-[13px]">|</span>
-            <Link href="/signup" className="hover:underline leading-none">Sign Up</Link>
+          {/* ROW 2 - PHONE ONLY: Search full width */}
+          <div className="flex md:hidden gap-2 mt-2 w-full">
+            <div className="flex-1 min-w-0 bg-[#f2f2f2] rounded-full px-3 h-[42px] flex items-center"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search agent, place, estate, land, carcass, 2 bed..." className="flex-1 min-w-0 bg-transparent text-[13px] outline-none" /></div>
+            <button className="bg-blue-600 text-white h-[42px] px-4 rounded-full text-[12px] font-bold shrink-0">Search</button>
+            <button onClick={subscribePush} className={`h-[42px] px-3 rounded-full text-[11px] font-bold whitespace-nowrap shrink-0 ${pushSubscribed?"bg-green-600 text-white":"bg-black text-white"}`}>{pushSubscribed?"🔔 ON":"🔔 Alerts"}</button>
           </div>
-          <Link href="/upload" className="shrink-0 bg-black hover:bg-[#7C3AED] text-white h-[32px] px-4 rounded-full text-[12px] font-black flex items-center justify-center whitespace-nowrap transition">+ Post Property</Link>
         </div>
-        {/* ===== FILTER ROW - SAME LEVEL: Filters LEFT, Earn Scrolling RIGHT, A BIT AWAY ===== */}
-        <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-nowrap overflow-hidden">
-          <div className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>setShowStates(false)}>
-            <button className="bg-[#f2f2f2] hover:bg-[#e5e5e5] h-[32px] px-4 rounded-lg text-[13px] font-medium flex items-center gap-1">States <span className="text-[10px]">▼</span></button>
+        {/* ===== FILTER ROW - SCROLLS SIDEWAYS ON PHONE LIKE YOUTUBE ===== */}
+        <div className="max-w-[1400px] mx-auto px-2 sm:px-4 pb-2 flex items-center gap-2 flex-nowrap overflow-x-auto no-scrollbar w-full">
+          <div ref={statesRef} className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>{ if(!statesPinned) setShowStates(false); }}>
+            <button onClick={()=>{ if(showStates){ setStatesPinned(!statesPinned); if(statesPinned) setShowStates(false); } else { setShowStates(true); setStatesPinned(true); } }} className={`h-[32px] px-3 sm:px-4 rounded-lg text-[12px] sm:text-[13px] font-medium flex items-center gap-1 whitespace-nowrap ${showStates || filter!=="All" ? "bg-blue-600 text-white" : "bg-[#f2f2f2] hover:bg-[#e5e5e5] hover:bg-blue-600 hover:text-white"}`}>
+              <span className="truncate max-w-[90px] sm:max-w-none">{filter==="All" ? "States" : filter}</span> <span className="text-[10px]">{showStates ? "▲" : "▼"}</span>
+            </button>
             {showStates && (
-              <div className="absolute top-[34px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-3 w-[420px] z-50 grid grid-cols-3 gap-1">
-                <button onClick={()=>{setFilter("All"); setShowStates(false)}} className={`text-left px-3 py-2 rounded-lg text-[12px] font-bold ${filter==="All"?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>All States</button>
-                {NIGERIA_STATES.map(st=><button key={st} onClick={()=>{setFilter(st); setShowStates(false)}} className={`text-left px-3 py-1.5 rounded-lg text-[12px] truncate ${filter===st?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>{st}</button>)}
+              <div className="absolute top-[36px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-3 w-[92vw] max-w-[420px] z-[60] max-h-[70vh] overflow-y-auto">
+                <input value={stateSearch} onChange={e=>setStateSearch(e.target.value)} placeholder="Search state... e.g. Lagos" className="w-full bg-[#f2f2f2] rounded-lg px-3 py-2 text-[12px] outline-none mb-2" />
+                <button onClick={()=>{setFilter("All"); setShowStates(false); setStatesPinned(false); setStateSearch("");}} className={`w-full text-left px-3 py-2 rounded-lg text-[12px] font-bold mb-1 ${filter==="All"?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>🌍 All States (36 + FCT)</button>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                  {filteredStates.map(st=><button key={st} onClick={()=>{setFilter(st); setShowStates(false); setStatesPinned(false); setStateSearch("");}} className={`text-left px-3 py-2 rounded-lg text-[12px] truncate ${filter===st?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>{filter===st ? "✓ " : ""}{st}</button>)}
+                </div>
+                {filteredStates.length===0 && <p className="text-center text-[12px] text-gray-400 py-3">No state found for "{stateSearch}"</p>}
+                <p className="text-center text-[10px] text-gray-400 mt-2">{statesPinned ? "🔒 Locked down — tap States again to unlock" : "Hover to open • Tap States to lock it down"}</p>
               </div>
             )}
           </div>
-          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-2 sm:px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Types</option>
             <option value="duplex">Duplex</option>
             <option value="flat">Flat</option>
@@ -509,7 +549,7 @@ export default function Home() {
             <option value="carcass">Carcass</option>
             <option value="self-contain">Self-Contain</option>
           </select>
-          <select value={bedFilter} onChange={e=>setBedFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
+          <select value={bedFilter} onChange={e=>setBedFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-2 sm:px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Beds</option>
             <option value="1">1 Bed</option>
             <option value="2">2 Beds</option>
@@ -517,16 +557,18 @@ export default function Home() {
             <option value="4">4 Beds</option>
             <option value="5+">5+ Beds</option>
           </select>
-          <select value={priceFilter} onChange={e=>setPriceFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-3 rounded-lg text-[12px] font-medium shrink-0">
+          <select value={priceFilter} onChange={e=>setPriceFilter(e.target.value)} className="bg-[#f2f2f2] h-[32px] px-2 sm:px-3 rounded-lg text-[12px] font-medium shrink-0">
             <option value="All">All Prices</option>
             <option value="Under 50M">Under ₦50M</option>
             <option value="50M - 100M">₦50M - 100M</option>
             <option value="100M - 350M">₦100M - 350M</option>
             <option value="Above 350M">Above ₦350M</option>
           </select>
-          {/* EARN SCROLLING - SAME LEVEL, A BIT AWAY FROM FILTERS, ON THE RIGHT - CORRECTED: Level 3 is 3% */}
-          <div className="flex-1 min-w-[200px] ml-6 bg-black rounded-full overflow-hidden whitespace-nowrap h-[32px] flex items-center">
-            <div className="inline-block text-[12px] font-bold tracking-wide" style={{ animation: "earnScroll 60s linear infinite" }}>
+        </div>
+        {/* ===== EARN TICKER - OWN LINE, ENTERS FROM RIGHT EDGE, SLOW ===== */}
+        <div className="max-w-[1400px] mx-auto px-2 sm:px-4 pb-3 w-full">
+          <div className="w-full bg-black rounded-full overflow-hidden whitespace-nowrap h-[32px] flex items-center">
+            <div className="inline-block text-[12px] font-bold tracking-wide whitespace-nowrap pl-[100vw]" style={{ animation: "earnScroll 60s linear infinite" }}>
               <span className="mx-6 text-white">🔥 EARN BY INVITING AN AGENT TO THE PLATFORM — GET PAID EVERY FRIDAY 💰</span>
               <span className="mx-6 text-yellow-400">✦ Earn 10% On Level 1 • 5% On Level 2 • 3% On Level 3 ✦</span>
               <span className="mx-6 text-white">YOUR LINK = YOUR MONEY — SHARE IT, EARN FOR LIFE 💸</span>
@@ -538,27 +580,28 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <div className="max-w-[1400px] mx-auto px-4 pb-2 flex items-center gap-2">
-          <span className="text-[11px] text-gray-500">Found: {filtered.length} | {filter} | {typeFilter} | {bedFilter} Beds | {priceFilter}</span>
+        <div className="max-w-[1400px] mx-auto px-2 sm:px-4 pb-2 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] text-gray-500 truncate">Found: {filtered.length} | {filter} | {typeFilter} | {bedFilter} Beds | {priceFilter}</span>
+          {filter!=="All" && <button onClick={()=>setFilter("All")} className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold shrink-0">Clear State ✕</button>}
         </div>
       </header>
-      <div className="max-w-[1400px] mx-auto px-3 pt-3">
+      <div className="max-w-[1400px] mx-auto px-2 sm:px-3 pt-3 w-full">
         {showBanner && (
-          <div className="bg-gradient-to-r from-[#F5F0FF] via-[#D8B4FE] to-[#A78BFA] text-purple-950 border border-purple-200 p-4 rounded-xl text-center font-bold shadow-[0_10px_30px_rgba(139,92,246,0.25)]">
+          <div className="bg-gradient-to-r from-[#F5F0FF] via-[#D8B4FE] to-[#A78BFA] text-purple-950 border border-purple-200 p-3 sm:p-4 rounded-xl text-center font-bold shadow-[0_10px_30px_rgba(139,92,246,0.25)] text-[13px] sm:text-[15px]">
             🎉 LOYALTY REWARD: POST 10 IN 7 DAYS, GET 2 FREE - Ends 6th Jan 2027
-            <p className="text-sm font-normal mt-1">Pay for 10 listings WITHIN 7 DAYS, get FREE 1: 5 Static Sliding Pictures for 2 Weeks + FREE 2: 60 Sec Video for 1 Month. If you exceed 7 days, it will NOT count. 5 Day Free Package still active.</p>
+            <p className="text-[12px] sm:text-sm font-normal mt-1">Pay for 10 listings WITHIN 7 DAYS, get FREE 1: 5 Static Sliding Pictures for 2 Weeks + FREE 2: 60 Sec Video for 1 Month. If you exceed 7 days, it will NOT count. 5 Day Free Package still active.</p>
           </div>
         )}
       </div>
-      <div className="max-w-[1400px] mx-auto p-3 space-y-6">
+      <div className="max-w-[1400px] mx-auto p-2 sm:p-3 space-y-6 w-full">
         {chunks.map((chunk:any, gi:number)=>{
           const videoProp = chunk.video;
           const group = chunk.statics;
           const videoKey = videoProp ? `video-${videoProp.id}` : `video-empty-${gi}`;
           return (
-          <div key={gi} className="space-y-6">
+          <div key={gi} className="space-y-6 w-full min-w-0">
             {group.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 w-full">
               {group.map((p:any)=>{
                 const imgs = getAllImgs(p);
                 const totalSlides = getTotalSlides(p);
@@ -570,8 +613,8 @@ export default function Home() {
                 const waNumber = p.whatsapp_number || p.whatsapp || "";
                 const pComments = comments[p.id.toString()] || [];
                 return (
-                <div key={p.id} className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition flex flex-col">
-                  <div className="relative aspect-[16/9] bg-[#f2f2f2] cursor-pointer group overflow-hidden">
+                <div key={p.id} className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition flex flex-col w-full min-w-0">
+                  <div className="relative aspect-[16/9] bg-[#f2f2f2] cursor-pointer group overflow-hidden w-full">
                     {showDescSlide ? (
                       <div onClick={()=>{setSelected(p); setImgIdx(cIdx);}} className="w-full h-full bg-[#F5F0FF] p-3 overflow-hidden flex flex-col">
                         <p className="text-[11px] font-black text-purple-700">📝 Description</p>
@@ -584,39 +627,39 @@ export default function Home() {
                     {showNew && (<span className="absolute top-2 left-2 bg-black text-white text-[8px] font-black px-2.5 py-0.5 rounded-full z-10 tracking-widest" style={{ animation: "newGlow 1.6s ease-in-out infinite" }}>NEW</span>)}
                     {totalSlides>1 && (
                       <>
-                        <button onClick={(e)=>{e.stopPropagation(); setCardSlide(s=>({...s,[p.id]: cIdx===0? totalSlides-1 : cIdx-1}))}} className="absolute left-1 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-full flex items-center justify-center shadow font-bold text-[14px] opacity-0 group-hover:opacity-100 md:opacity-100 transition">‹</button>
-                        <button onClick={(e)=>{e.stopPropagation(); setCardSlide(s=>({...s,[p.id]: cIdx===totalSlides-1?0:cIdx+1}))}} className="absolute right-1 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-full flex items-center justify-center shadow font-bold text-[14px] opacity-0 group-hover:opacity-100 md:opacity-100 transition">›</button>
+                        <button onClick={(e)=>{e.stopPropagation(); setCardSlide(s=>({...s,[p.id]: cIdx===0? totalSlides-1 : cIdx-1}))}} className="absolute left-1 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-full flex items-center justify-center shadow font-bold text-[14px] opacity-100 transition">‹</button>
+                        <button onClick={(e)=>{e.stopPropagation(); setCardSlide(s=>({...s,[p.id]: cIdx===totalSlides-1?0:cIdx+1}))}} className="absolute right-1 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-blue-600 hover:text-white w-7 h-7 rounded-full flex items-center justify-center shadow font-bold text-[14px] opacity-100 transition">›</button>
                       </>
                     )}
                     <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded cursor-pointer" onClick={()=>{setSelected(p); setImgIdx(cIdx);}}>{totalSlides>1? `${cIdx+1}/${totalSlides} ${showDescSlide ? "📝 Desc" : "📸"}` : "1 / 1"}</span>
                     <button onClick={(e)=>{e.stopPropagation(); setFollowed(pr=>({...pr,[p.id]:!pr[p.id]}))}} className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-[9px] font-bold shadow transition ${followed[p.id]?"bg-white text-black":"bg-[#f2f2f2] hover:bg-blue-600 hover:text-white text-black"}`}>{followed[p.id]?"Following ✓":"+ Follow"}</button>
                   </div>
-                  <div className="p-3 flex-1 flex flex-col">
-                    <h3 className="font-medium text-[13px] leading-[1.3] line-clamp-2 cursor-pointer" onClick={()=>{setSelected(p); setImgIdx(cIdx);}}>{p.title} - {p.location}</h3>
-                    <p className="text-[11px] text-gray-500 mt-1">📍 {p.location} • {formatPrice(p.price)} • {getBeds(p) ? `${getBeds(p)} Bed` : ""} • {getType(p)}</p>
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-                      <div className="w-8 h-8 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[12px] font-black">{agentName ? agentName[0].toUpperCase() : "A"}</div>
-                      <div className="flex-1">
-                        <p className="text-[12px] font-black text-[#0A1931] leading-none">{agentName || "Agent"}</p>
-                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">Property Agent • Posted {p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}</p>
+                  <div className="p-2 sm:p-3 flex-1 flex flex-col min-w-0">
+                    <h3 className="font-medium text-[12px] sm:text-[13px] leading-[1.3] line-clamp-2 cursor-pointer" onClick={()=>{setSelected(p); setImgIdx(cIdx);}}>{p.title} - {p.location}</h3>
+                    <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 break-words">📍 {p.location} • {formatPrice(p.price)} • {getBeds(p) ? `${getBeds(p)} Bed` : ""} • {getType(p)}</p>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[12px] font-black shrink-0">{agentName ? agentName[0].toUpperCase() : "A"}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-black text-[#0A1931] leading-none truncate">{agentName || "Agent"}</p>
+                        <p className="text-[9px] text-gray-400 font-bold mt-0.5 truncate">Property Agent • Posted {p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-                      <button onClick={()=>handleLike(p)} className={`bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium flex items-center gap-1 ${liked[p.id]?"bg-black text-white hover:bg-black":""}`}>👍 {likes[p.id] ?? p.likes_count ?? 0}</button>
-                      <button onClick={()=>setActiveCommentId(activeCommentId===p.id?null:p.id)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium">💬 {pComments.length}</button>
-                      <button onClick={()=>handleShare(p)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-3 h-[30px] rounded-full text-[11px] font-medium">↗️ Share</button>
-                      {agentId && (<Link href={`/my-office/${agentId}`} className="bg-black text-white h-[30px] px-4 rounded-full text-[11px] font-black flex items-center justify-center hover:bg-[#D4AF37] hover:text-black transition border border-black">My Office</Link>)}
+                      <button onClick={()=>handleLike(p)} className={`bg-[#f2f2f2] hover:bg-[#e5e5e5] px-2 sm:px-3 h-[30px] rounded-full text-[11px] font-medium flex items-center gap-1 ${liked[p.id]?"bg-black text-white hover:bg-black":""}`}>👍 {likes[p.id] ?? p.likes_count ?? 0}</button>
+                      <button onClick={()=>setActiveCommentId(activeCommentId===p.id?null:p.id)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-2 sm:px-3 h-[30px] rounded-full text-[11px] font-medium">💬 {pComments.length}</button>
+                      <button onClick={()=>handleShare(p)} className="bg-[#f2f2f2] hover:bg-[#e5e5e5] px-2 sm:px-3 h-[30px] rounded-full text-[11px] font-medium">↗️ Share</button>
+                      {agentId && (<Link href={`/my-office/${agentId}`} className="bg-black text-white h-[30px] px-3 sm:px-4 rounded-full text-[11px] font-black flex items-center justify-center hover:bg-[#D4AF37] hover:text-black transition border border-black">My Office</Link>)}
                     </div>
                     {activeCommentId===p.id && (
                       <div className="mt-3 bg-[#f8f8f8] rounded-xl p-2.5">
                         <div className="space-y-2 mb-2 max-h-[120px] overflow-y-auto">
                           {pComments.length===0 && <p className="text-[10px] text-gray-400 text-center py-2">No comments yet — be first! 💬</p>}
-                          {pComments.map((c:any,i:number)=><div key={i} className="bg-white rounded-lg px-2.5 py-1.5"><div className="flex justify-between"><b className="text-[10px]">{c.name}</b><span className="text-[8px] text-gray-400">{c.time}</span></div><p className="text-[11px] mt-0.5">{c.text}</p></div>)}
+                          {pComments.map((c:any,i:number)=><div key={i} className="bg-white rounded-lg px-2.5 py-1.5"><div className="flex justify-between"><b className="text-[10px]">{c.name}</b><span className="text-[8px] text-gray-400">{c.time}</span></div><p className="text-[11px] mt-0.5 break-words">{c.text}</p></div>)}
                         </div>
                         <div className="relative bg-white rounded-full flex items-center px-1 h-[30px] shadow-sm">
-                          <button onClick={()=>setShowPicker(showPicker===p.id?null:p.id)} className="w-6 h-6 rounded-full bg-[#f2f2f2] flex items-center justify-center text-[13px] ml-0.5">😊</button>
-                          <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Add a comment..." className="flex-1 bg-transparent px-2 text-[11px] outline-none" />
-                          <button onClick={()=>postComment(p.id)} className="bg-blue-600 text-white px-3 h-[24px] rounded-full text-[10px] font-bold mr-0.5">Post</button>
+                          <button onClick={()=>setShowPicker(showPicker===p.id?null:p.id)} className="w-6 h-6 rounded-full bg-[#f2f2f2] flex items-center justify-center text-[13px] ml-0.5 shrink-0">😊</button>
+                          <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Add a comment..." className="flex-1 min-w-0 bg-transparent px-2 text-[11px] outline-none" />
+                          <button onClick={()=>postComment(p.id)} className="bg-blue-600 text-white px-3 h-[24px] rounded-full text-[10px] font-bold mr-0.5 shrink-0">Post</button>
                           {showPicker===p.id && (<div className="absolute bottom-[36px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-2 w-[220px] z-20"><div className="grid grid-cols-8 gap-1">{EMOJIS.map(em=><button key={em} onClick={()=>setNewComment(prev=>prev+em)} className="w-6 h-6 bg-[#f2f2f2] hover:bg-[#e5e5e5] rounded-full text-[13px]">{em}</button>)}</div></div>)}
                         </div>
                       </div>
@@ -631,22 +674,22 @@ export default function Home() {
             </div>
             )}
             {videoProp && (
-            <div className="w-full">
-              <div className="flex items-stretch gap-4 justify-center">
+            <div className="w-full min-w-0">
+              <div className="flex flex-col lg:flex-row items-stretch gap-4 justify-center w-full">
                 <div className="hidden lg:flex w-[220px] shrink-0 flex-col justify-end">
                   <div className="sticky bottom-4"><FeedbackButton variant="inline" /><p className="text-[10px] text-gray-400 text-center mt-1">Report a problem here</p></div>
                 </div>
                 <div className="w-full max-w-[800px] flex-1 min-w-0">
               <div className="w-full">
-                <div className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition">
-                  <div className="relative aspect-video bg-black cursor-pointer" onClick={()=>setYoutubeVideo({poster: getImg(videoProp), videoUrl: videoProp?.video_url})}>
+                <div className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition w-full">
+                  <div className="relative aspect-video bg-black cursor-pointer w-full" onClick={()=>setYoutubeVideo({poster: getImg(videoProp), videoUrl: videoProp?.video_url})}>
                     <img src={getImg(videoProp)} className="w-full h-full object-cover opacity-80" onError={(e:any)=> e.target.src=FALLBACK_IMG} alt="" />
                     <div className="absolute inset-0 flex items-center justify-center"><div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">▶️</div></div>
                     <span className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded">AD • VIDEO</span>
                     <button onClick={(e)=>{e.stopPropagation(); setVideoFollowed(!videoFollowed)}} className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-[9px] font-bold shadow transition ${videoFollowed?"bg-white text-black":"bg-[#f2f2f2] hover:bg-blue-600 hover:text-white text-black"}`}>{videoFollowed?"Following ✓":"+ Follow"}</button>
                   </div>
                   <div className="p-3">
-                    <div className="flex items-center gap-2 mb-2"><div className="w-7 h-7 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[11px] font-black">{videoProp?.agent_name?.[0] || "A"}</div><span className="text-[12px] font-black">{videoProp?.agent_name || "Agent"}</span></div>
+                    <div className="flex items-center gap-2 mb-2 min-w-0"><div className="w-7 h-7 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[11px] font-black shrink-0">{videoProp?.agent_name?.[0] || "A"}</div><span className="text-[12px] font-black truncate">{videoProp?.agent_name || "Agent"}</span></div>
                     <h3 className="font-medium text-[13px]">Sponsored Tour - {videoProp?.location}</h3>
                     {videoProp?.description && <p className="text-[11px] text-gray-600 mt-1 line-clamp-2">{videoProp.description}</p>}
                     <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -659,12 +702,12 @@ export default function Home() {
                       <div className="mt-3 bg-[#f8f8f8] rounded-xl p-2.5">
                         <div className="space-y-2 mb-2 max-h-[120px] overflow-y-auto">
                           {videoComments.length===0 && <p className="text-[10px] text-gray-400 text-center py-2">No comments yet on video tour! 💬</p>}
-                          {videoComments.map((c:any,i:number)=><div key={i} className="bg-white rounded-lg px-2.5 py-1.5"><div className="flex justify-between"><b className="text-[10px]">{c.name}</b><span className="text-[8px] text-gray-400">{c.time}</span></div><p className="text-[11px] mt-0.5">{c.text}</p></div>)}
+                          {videoComments.map((c:any,i:number)=><div key={i} className="bg-white rounded-lg px-2.5 py-1.5"><div className="flex justify-between"><b className="text-[10px]">{c.name}</b><span className="text-[8px] text-gray-400">{c.time}</span></div><p className="text-[11px] mt-0.5 break-words">{c.text}</p></div>)}
                         </div>
                         <div className="relative bg-white rounded-full flex items-center px-1 h-[30px] shadow-sm">
-                          <button onClick={()=>setShowVideoPicker(!showVideoPicker)} className="w-6 h-6 rounded-full bg-[#f2f2f2] flex items-center justify-center text-[13px] ml-0.5">😊</button>
-                          <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comment on video tour..." className="flex-1 bg-transparent px-2 text-[11px] outline-none" />
-                          <button onClick={()=>postComment("video_feed")} className="bg-blue-600 text-white px-3 h-[24px] rounded-full text-[10px] font-bold mr-0.5">Post</button>
+                          <button onClick={()=>setShowVideoPicker(!showVideoPicker)} className="w-6 h-6 rounded-full bg-[#f2f2f2] flex items-center justify-center text-[13px] ml-0.5 shrink-0">😊</button>
+                          <input value={newComment} onChange={e=>setNewComment(e.target.value)} placeholder="Comment on video tour..." className="flex-1 min-w-0 bg-transparent px-2 text-[11px] outline-none" />
+                          <button onClick={()=>postComment("video_feed")} className="bg-blue-600 text-white px-3 h-[24px] rounded-full text-[10px] font-bold mr-0.5 shrink-0">Post</button>
                           {showVideoPicker && (<div className="absolute bottom-[36px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-2 w-[220px] z-20"><div className="grid grid-cols-8 gap-1">{EMOJIS.map(em=><button key={em} onClick={()=>setNewComment(prev=>prev+em)} className="w-6 h-6 bg-[#f2f2f2] hover:bg-[#e5e5e5] rounded-full text-[13px]">{em}</button>)}</div></div>)}
                         </div>
                       </div>
@@ -685,11 +728,11 @@ export default function Home() {
       {selected && (
         <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-2 md:p-4" onClick={()=>setSelected(null)}>
           <div className="bg-white rounded-xl max-w-4xl w-full overflow-hidden max-h-[92vh] flex flex-col" onClick={e=>e.stopPropagation()}>
-            <div className="relative h-[380px] md:h-[480px] bg-black flex items-center justify-center group">
+            <div className="relative h-[280px] sm:h-[380px] md:h-[480px] bg-black flex items-center justify-center group w-full">
               {isDescSlide(selected, imgIdx) ? (
                 <div className="w-full h-full bg-[#F5F0FF] p-5 md:p-8 overflow-y-auto">
                   <p className="text-[13px] font-black text-purple-700">📝 Description — {selected.title}</p>
-                  <p className="text-[14px] leading-relaxed text-gray-800 mt-3 whitespace-pre-wrap">{selected.description}</p>
+                  <p className="text-[14px] leading-relaxed text-gray-800 mt-3 whitespace-pre-wrap break-words">{selected.description}</p>
                 </div>
               ) : (
                 <img src={getAllImgs(selected)[imgIdx] || FALLBACK_IMG} className="w-full h-full object-contain" onError={(e:any)=> e.target.src=FALLBACK_IMG} alt="" />
@@ -699,18 +742,18 @@ export default function Home() {
                 <>
                   <button onClick={()=>setImgIdx(prev=> prev===0? getTotalSlides(selected)-1 : prev-1)} className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 bg-white/95 hover:bg-blue-600 hover:text-white w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-2xl text-[26px] font-black z-20 transition">‹</button>
                   <button onClick={()=>setImgIdx(prev=> prev===getTotalSlides(selected)-1?0:prev+1)} className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 bg-white/95 hover:bg-blue-600 hover:text-white w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-2xl text-[26px] font-black z-20 transition">›</button>
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 text-white px-4 py-1.5 rounded-full text-[12px] font-bold z-20">{imgIdx+1} / {getTotalSlides(selected)} {isDescSlide(selected, imgIdx) ? "📝 Description" : "📸 Slide"}</div>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 text-white px-4 py-1.5 rounded-full text-[12px] font-bold z-20 whitespace-nowrap">{imgIdx+1} / {getTotalSlides(selected)} {isDescSlide(selected, imgIdx) ? "📝 Description" : "📸 Slide"}</div>
                 </>
               ) : null}
             </div>
             <div className="p-4 overflow-y-auto">
-              <h2 className="font-bold text-[15px]">{selected.title}</h2>
-              <p className="text-[12px] text-gray-500">📍 {selected.location} • by {selected.agent_name || "Agent"}</p>
+              <h2 className="font-bold text-[15px] break-words">{selected.title}</h2>
+              <p className="text-[12px] text-gray-500 break-words">📍 {selected.location} • by {selected.agent_name || "Agent"}</p>
               <p className="font-black text-green-600 mt-2 text-[18px]">{formatPrice(selected.price)}</p>
               {selected.description && (
                 <div className="mt-3 bg-[#F5F0FF] rounded-xl p-3">
                   <p className="text-[12px] font-black">📝 Description</p>
-                  <p className="text-[13px] leading-relaxed text-gray-800 mt-1 whitespace-pre-wrap">{selected.description}</p>
+                  <p className="text-[13px] leading-relaxed text-gray-800 mt-1 whitespace-pre-wrap break-words">{selected.description}</p>
                 </div>
               )}
               {isNewProperty(selected) && <span className="mt-2 inline-block bg-black text-white text-[9px] font-black px-2.5 py-1 rounded-full" style={{ animation: "newGlow 1.6s ease-in-out infinite" }}>NEW • {new Date(selected.created_at).toLocaleDateString()}</span>}
@@ -729,7 +772,7 @@ export default function Home() {
       )}
       {showTerms && (
         <div className="fixed inset-0 bg-black/85 z-[300] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-[500px] w-full p-5 max-h-[85vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-[500px] w-full p-4 sm:p-5 max-h-[85vh] overflow-y-auto">
             <h2 className="font-black text-[18px] text-center">Welcome to mypropertydot.com</h2>
             <p className="text-[12px] text-gray-500 text-center mt-1">Please read before you continue</p>
             <div className="bg-yellow-100 border border-yellow-400 p-3 rounded-xl mt-4 text-[12px] leading-relaxed">
@@ -738,7 +781,7 @@ export default function Home() {
               You are ADVISED to <b>check every client, check every property, check every document, and check your chat progress</b> before paying any money. Visit the property, ask for ID + proof of ownership, and use a lawyer.
             </div>
             <label className="flex items-start gap-2 mt-4 cursor-pointer">
-              <input type="checkbox" checked={termsChecked} onChange={e=>setTermsChecked(e.target.checked)} className="mt-1 w-4 h-4" />
+              <input type="checkbox" checked={termsChecked} onChange={e=>setTermsChecked(e.target.checked)} className="mt-1 w-4 h-4 shrink-0" />
               <span className="text-[12px]">I have read and agree to the <Link href="/terms" className="text-blue-600 font-bold underline">Terms & Conditions</Link>. I understand mypropertydot.com is not liable for stolen / fake property and I must verify before paying.</span>
             </label>
             <button onClick={acceptTerms} className="w-full bg-black text-white h-[42px] rounded-full text-[13px] font-bold mt-4">I Agree - Continue</button>
@@ -746,13 +789,13 @@ export default function Home() {
           </div>
         </div>
       )}
-      <div className="max-w-[1400px] mx-auto px-3 md:px-4 pt-3 pb-1">
+      <div className="max-w-[1400px] mx-auto px-2 sm:px-3 md:px-4 pt-3 pb-1 w-full">
         <AcquisitionContact />
-        <p className="text-center text-[10px] text-gray-300 mt-1.5">Or email CEO: <a href="mailto:ceo@mypropertydot.com" className="text-gray-400 underline underline-offset-2">ceo@mypropertydot.com</a></p>
+        <p className="text-center text-[10px] text-gray-300 mt-1.5 break-words">Or email CEO: <a href="mailto:ceo@mypropertydot.com" className="text-gray-400 underline underline-offset-2">ceo@mypropertydot.com</a></p>
       </div>
-      <footer className="max-w-[1400px] mx-auto px-4 py-6 text-center border-t mt-4">
+      <footer className="max-w-[1400px] mx-auto px-4 py-6 text-center border-t mt-4 w-full">
         <p className="text-[11px] text-gray-500">mypropertydot.com is only a listing platform. We are not liable for stolen / fake property. Always verify client, property, documents & chat before paying.</p>
-        <div className="flex justify-center gap-4 mt-2">
+        <div className="flex justify-center gap-4 mt-2 flex-wrap">
           <Link href="/terms" className="text-[12px] font-bold underline">Terms & Conditions</Link>
           <Link href="/" className="text-[12px] font-bold underline">Homepage</Link>
         </div>
