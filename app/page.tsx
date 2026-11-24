@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import Link from "next/link";
 import FeedbackButton from "./components/FeedbackButton";
@@ -264,6 +264,9 @@ export default function Home() {
   const [bedFilter, setBedFilter] = useState("All");
   const [priceFilter, setPriceFilter] = useState("All");
   const [showStates, setShowStates] = useState(false);
+  const [statesPinned, setStatesPinned] = useState(false);
+  const [stateSearch, setStateSearch] = useState("");
+  const statesRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<any>(null);
   const [imgIdx, setImgIdx] = useState(0);
   const [activeCommentId, setActiveCommentId] = useState<any>(null);
@@ -286,6 +289,23 @@ export default function Home() {
   const [termsChecked, setTermsChecked] = useState(false);
   const bannerEndDate = new Date("2027-01-06");
   const showBanner = new Date() < bannerEndDate;
+
+  // FIXED: Close States when clicking outside - this makes 2nd click + outside click close it
+  useEffect(()=>{
+    if(!showStates) return;
+    const onClick = (e:any)=>{
+      if(statesRef.current && !statesRef.current.contains(e.target)){
+        setShowStates(false);
+        setStatesPinned(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("touchstart", onClick);
+    return ()=>{ document.removeEventListener("mousedown", onClick); document.removeEventListener("touchstart", onClick); };
+  },[showStates]);
+
+  const filteredStates = NIGERIA_STATES.filter(st => st.toLowerCase().includes(stateSearch.toLowerCase()));
+
   useEffect(()=>{
     if(typeof window!=="undefined" && "serviceWorker" in navigator){
       navigator.serviceWorker.register("/sw.js").catch(()=>{});
@@ -470,7 +490,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f8f8f8]">
       <WeatherBar />
-      <header className="bg-white sticky top-[52px] z-40 shadow-sm">
+      <header className="bg-white sticky top-[52px] z-40 shadow-sm overflow-visible">
         <div className="max-w-[1400px] mx-auto px-4 py-2 flex items-center gap-3">
           <Link href="/" className="shrink-0 flex items-center">
             <img src="/logo.png" alt="mypropertydot.com - Two hands giving you any property" className="h-[115px] w-auto max-w-[300px] md:max-w-[380px] object-contain" />
@@ -489,14 +509,24 @@ export default function Home() {
           </div>
           <Link href="/upload" className="shrink-0 bg-black hover:bg-[#7C3AED] text-white h-[32px] px-4 rounded-full text-[12px] font-black flex items-center justify-center whitespace-nowrap transition">+ Post Property</Link>
         </div>
-        {/* ===== FILTER ROW - SAME LEVEL: Filters LEFT, Earn Scrolling RIGHT, A BIT AWAY ===== */}
-        <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-nowrap overflow-hidden">
-          <div className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>setShowStates(false)}>
-            <button className="bg-[#f2f2f2] hover:bg-[#e5e5e5] h-[32px] px-4 rounded-lg text-[13px] font-medium flex items-center gap-1">States <span className="text-[10px]">▼</span></button>
+        {/* ===== FILTER ROW - FIXED: overflow-visible so States dropdown is NOT cut off ===== */}
+        <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-nowrap overflow-visible">
+          {/* ===== STATES - FIXED: Hover = blue + open, Click 1 = lock, Click 2 = close, Click outside = close ===== */}
+          <div ref={statesRef} className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>{ if(!statesPinned) setShowStates(false); }}>
+            <button onClick={()=>{ if(showStates){ setShowStates(false); setStatesPinned(false); } else { setShowStates(true); setStatesPinned(true); } }} className={`h-[32px] px-4 rounded-lg text-[13px] font-medium flex items-center gap-1 whitespace-nowrap transition ${showStates || filter!=="All" ? "bg-blue-600 text-white" : "bg-[#f2f2f2] hover:bg-blue-600 hover:text-white"}`}>
+              {filter==="All" ? "States" : filter} <span className="text-[10px]">{showStates ? "▲" : "▼"}</span>
+            </button>
             {showStates && (
-              <div className="absolute top-[34px] left-0 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-3 w-[420px] z-50 grid grid-cols-3 gap-1">
-                <button onClick={()=>{setFilter("All"); setShowStates(false)}} className={`text-left px-3 py-2 rounded-lg text-[12px] font-bold ${filter==="All"?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>All States</button>
-                {NIGERIA_STATES.map(st=><button key={st} onClick={()=>{setFilter(st); setShowStates(false)}} className={`text-left px-3 py-1.5 rounded-lg text-[12px] truncate ${filter===st?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>{st}</button>)}
+              <div className="absolute top-[32px] left-0 pt-1 bg-transparent z-[60]">
+                <div className="bg-white shadow-[0_4px_20px_rgba(0,0,0,0.15)] rounded-xl p-3 w-[92vw] max-w-[420px] max-h-[70vh] overflow-y-auto">
+                  <input value={stateSearch} onChange={e=>setStateSearch(e.target.value)} placeholder="Search state... e.g. Lagos" className="w-full bg-[#f2f2f2] rounded-lg px-3 py-2 text-[12px] outline-none mb-2" />
+                  <button onClick={()=>{setFilter("All"); setShowStates(false); setStatesPinned(false); setStateSearch("");}} className={`w-full text-left px-3 py-2 rounded-lg text-[12px] font-bold mb-1 ${filter==="All"?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>🌍 All States (36 + FCT)</button>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
+                    {filteredStates.map(st=><button key={st} onClick={()=>{setFilter(st); setShowStates(false); setStatesPinned(false); setStateSearch("");}} className={`text-left px-3 py-2 rounded-lg text-[12px] truncate ${filter===st?"bg-blue-600 text-white":"bg-[#f2f2f2] hover:bg-[#e5e5e5]"}`}>{filter===st ? "✓ " : ""}{st}</button>)}
+                  </div>
+                  {filteredStates.length===0 && <p className="text-center text-[12px] text-gray-400 py-3">No state found for "{stateSearch}"</p>}
+                  <p className="text-center text-[10px] text-gray-400 mt-2">{statesPinned ? "🔒 Locked — tap States again to close" : "Hover to open • Tap States to lock"}</p>
+                </div>
               </div>
             )}
           </div>
@@ -524,7 +554,6 @@ export default function Home() {
             <option value="100M - 350M">₦100M - 350M</option>
             <option value="Above 350M">Above ₦350M</option>
           </select>
-          {/* EARN SCROLLING - SAME LEVEL, A BIT AWAY FROM FILTERS, ON THE RIGHT - CORRECTED: Level 3 is 3% */}
           <div className="flex-1 min-w-[200px] ml-6 bg-black rounded-full overflow-hidden whitespace-nowrap h-[32px] flex items-center">
             <div className="inline-block text-[12px] font-bold tracking-wide" style={{ animation: "earnScroll 60s linear infinite" }}>
               <span className="mx-6 text-white">🔥 EARN BY INVITING AN AGENT TO THE PLATFORM — GET PAID EVERY FRIDAY 💰</span>
@@ -540,6 +569,7 @@ export default function Home() {
         </div>
         <div className="max-w-[1400px] mx-auto px-4 pb-2 flex items-center gap-2">
           <span className="text-[11px] text-gray-500">Found: {filtered.length} | {filter} | {typeFilter} | {bedFilter} Beds | {priceFilter}</span>
+          {filter!=="All" && <button onClick={()=>setFilter("All")} className="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">Clear State ✕</button>}
         </div>
       </header>
       <div className="max-w-[1400px] mx-auto px-3 pt-3">
