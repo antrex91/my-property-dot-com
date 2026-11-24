@@ -43,14 +43,6 @@ export default function MyOfficePage() {
         if (data) allRatings = data
       } catch {}
       const firstProp = properties[0]
-      // ===== VERIFICATION STATUS - FROM SIGNUP / CEO APPROVAL =====
-      // verification_status can be: 'pending' | 'approved' | 'verified' | 'rejected'
-      // Old agents without this field = treated as pending for safety, CEO can approve them in ceooffice
-      const rawStatus = (profile?.verification_status || profile?.status || '').toLowerCase()
-      const isVerified = rawStatus === 'approved' || rawStatus === 'verified' || profile?.nin_verified === true
-      const isRejected = rawStatus === 'rejected'
-      const verificationStatus = isVerified ? 'verified' : isRejected ? 'rejected' : 'pending'
-
       setAgent({
         name: profile?.name || firstProp?.agent_name || 'Agent',
         location: profile?.location || firstProp?.location || firstProp?.city || 'Nigeria',
@@ -58,11 +50,6 @@ export default function MyOfficePage() {
         avatar: profile?.avatar_url || '',
         phone: profile?.phone || firstProp?.phone || '',
         whatsapp: profile?.whatsapp || firstProp?.whatsapp || '',
-        verificationStatus,
-        isVerified,
-        isRejected,
-        ninLast4: profile?.nin_last4 || '',
-        createdAt: profile?.created_at || '',
       })
       setProps(properties)
       setRatings(allRatings)
@@ -110,14 +97,19 @@ export default function MyOfficePage() {
     if (!file) return
     setUploading(true)
     try {
+      // 1. Compress first - makes it small and fast
       const compressed = await compressImage(file)
       const fileName = `${agentId}-${Date.now()}.jpg`
+      // 2. Upload compressed version to Supabase Storage
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressed, { contentType: 'image/jpeg', upsert: true })
       if (uploadError) throw uploadError
+      // 3. Get public link
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName)
       const publicUrl = urlData.publicUrl
+      // 4. Save link to database
       const { error: dbError } = await supabase.from('agent_profiles').update({ avatar_url: publicUrl }).eq('id', agentId)
       if (dbError) throw dbError
+      // 5. Show it immediately
       setAgent((prev: any) => ({ ...prev, avatar: publicUrl }))
       alert('Profile picture changed 💜')
     } catch (err: any) {
@@ -183,36 +175,6 @@ export default function MyOfficePage() {
               <p className="text-white/90 text-xs mt-2">{uploading ? 'Compressing & Uploading picture...' : 'Tap picture to change it 📷'}</p>
             </div>
           </div>
-
-          {/* ===== VERIFIED AGENT BADGE - PUBLIC TRUST BADGE ===== */}
-          {agent.isVerified && (
-            <div className="mt-4 bg-green-500 text-white rounded-[20px] p-4 shadow-lg border-2 border-white/50">
-              <p className="font-black text-[16px]">✅ VERIFIED AGENT</p>
-              <p className="text-[13px] mt-1 font-medium">Name: {agent.name}</p>
-              <p className="text-[13px] font-medium">Photo: [clear face above ☝️]</p>
-              <p className="text-[13px] font-bold">NIN Status: Verified by MyPropertyDot</p>
-              <p className="text-[12px] mt-2 bg-white/20 rounded-xl p-2 leading-relaxed italic">"Compare the name and picture of the agent on the NIN to the one of this office of this agent."</p>
-              <p className="text-[11px] mt-2 opacity-90">When you meet this agent, ask to see their NIN card and compare face + name before you pay.</p>
-            </div>
-          )}
-
-          {agent.verificationStatus === 'pending' && (
-            <div className="mt-4 bg-yellow-400 text-black rounded-[20px] p-4 shadow-lg border-2 border-white/50">
-              <p className="font-black text-[16px]">⏳ PENDING VERIFICATION</p>
-              <p className="text-[13px] mt-1 font-medium">Name: {agent.name}</p>
-              <p className="text-[13px] font-medium">NIN Status: Pending Verification by MyPropertyDot</p>
-              <p className="text-[12px] mt-2 bg-black/10 rounded-xl p-2 leading-relaxed">⚠️ This agent has applied but has NOT yet been verified. Do not pay until you see ✅ VERIFIED AGENT. Ask to see their NIN card when you meet.</p>
-              <p className="text-[12px] mt-2 italic">"Compare the name and picture of the agent on the NIN to the one of this office of this agent."</p>
-            </div>
-          )}
-
-          {agent.isRejected && (
-            <div className="mt-4 bg-red-500 text-white rounded-[20px] p-4 shadow-lg border-2 border-white/50">
-              <p className="font-black text-[16px]">❌ NOT VERIFIED</p>
-              <p className="text-[13px] mt-1">This agent's NIN could not be verified. Do not deal with this office until it shows ✅ VERIFIED AGENT.</p>
-              <p className="text-[12px] mt-2 italic">"Compare the name and picture of the agent on the NIN to the one of this office of this agent."</p>
-            </div>
-          )}
         </div>
       </div>
 
@@ -227,6 +189,7 @@ export default function MyOfficePage() {
         </Link>
 
         {/* ===== AGENT DASHBOARD BUTTON - INSIDE MY-OFFICE, UNDER CHAT PROGRESS ===== */}
+        {/* Click → Goes to /agent-dashboard → Asks for Login Details First → Then Opens Dashboard */}
         <Link href="/agent-dashboard" className="block text-center bg-[#1e293b] text-white h-[52px] leading-[52px] rounded-full font-black mt-3 shadow-lg border-2 border-yellow-400">
           🔐 Agent Dashboard →
         </Link>
@@ -255,12 +218,6 @@ export default function MyOfficePage() {
 
         {agent.phone && <a href={`tel:${agent.phone}`} className="block text-center bg-green-500 text-white h-[52px] leading-[52px] rounded-full font-black mt-3">📞 Call {agent.name}</a>}
         {agent.whatsapp && <a href={`https://wa.me/${agent.whatsapp}`} target="_blank" className="block text-center bg-[#25D366] text-white h-[52px] leading-[52px] rounded-full font-black mt-3">💬 WhatsApp Me</a>}
-
-        {/* Report if face does not match */}
-        <a href={`https://wa.me/2348000000000?text=${encodeURIComponent(`Hello CEO, I want to report agent ${agent.name} - Office ID ${agentId} - Face / NIN does not match`)}`} target="_blank" className="block text-center bg-red-50 text-red-600 border border-red-200 h-[44px] leading-[44px] rounded-full font-bold mt-3 text-[13px]">
-          🚨 Report This Agent — Face / NIN Does Not Match
-        </a>
-        <p className="text-center text-[11px] text-gray-500 mt-1">If the person you meet is not the person in the photo above, report immediately. Do not pay.</p>
 
         <h2 className="font-black text-xl mt-8">🏠 My Properties ({props.length})</h2>
         {props.length === 0 && <p className="text-gray-500 text-sm mt-2">No properties yet.</p>}
