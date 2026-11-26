@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { supabase } from "../lib/supabaseClient";
 
 const PACKAGES = [
   { name: "5 Day Free", price: 0, type: "static", duration: "5 Days", desc: "Static + Sliding • 5 Days", maxImages: 5, maxVideoSec: 0 },
@@ -64,6 +65,16 @@ export default function UploadPage() {
       setPaidPackage(p);
       setSelected(p);
     }
+    // Load real logged-in agent
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setAgentEmail(data.user.email || "");
+        supabase.from("agent_profiles").select("name,phone").eq("id", data.user.id).single().then(({ data: prof }: any) => {
+          if (prof?.name) setAgentName(prof.name);
+          if (prof?.phone) setAgentPhone(prof.phone);
+        });
+      }
+    });
   }, []);
 
   const unlockUpload = (pkg: any) => {
@@ -82,8 +93,10 @@ export default function UploadPage() {
   };
 
   const handlePay = async () => {
-    const buyerId = localStorage.getItem("agent_id");
-    if (!buyerId) { alert("Please register as Agent first"); window.location.href = "/agent-register"; return; }
+    // FIXED: Use real Supabase user, not localStorage agent_id
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { alert("Please Sign Up / Login as Agent first"); window.location.href = "/signup"; return; }
+    const buyerId = user.id;
     if (!agentPhone.trim()) { alert("Enter phone"); return; }
     if (!agentEmail.trim()) { alert("Enter email for receipt"); return; }
     if (selected.name === "5 Day Free" && hasUsedFree) {
@@ -157,16 +170,73 @@ export default function UploadPage() {
     v.src = url;
   };
 
+  // ===== FIXED: REAL PUBLISH - Uploads to Supabase + Inserts into properties =====
   const handlePublish = async () => {
     if (!title.trim() || !propPrice.trim() || !location.trim()) { alert("Fill Title, Price, Location"); return; }
     if (canUploadImages && images.length === 0 && !canUploadVideo) { alert("Select pictures to upload"); return; }
     if (canUploadVideo && !videoFile && paidPackage?.type === "video") { alert("Select video to upload"); return; }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { alert("Please Login first"); window.location.href = "/login"; return; }
+
     setUploading(true);
-    setTimeout(() => {
-      alert(`✅ Published! Package: ${paidPackage?.name} - Duration: ${paidPackage?.duration}. Video will be compressed maximally.`);
-      setUploading(false);
+    try {
+      const stamp = Date.now();
+      // 1. Upload images
+      const imageUrls: string[] = [];
+      for (let i = 0; i < images.length; i++) {
+        const file = images[i];
+        const path = `${user.id}/${stamp}-${i}.${file.name.split(".").pop()}`;
+        const { error: upErr } = await supabase.storage.from("property-images").upload(path, file, { upsert: true });
+        if (upErr) throw new Error("Image upload failed: " + upErr.message);
+        const { data: urlData } = supabase.storage.from("property-images").getPublicUrl(path);
+        imageUrls.push(urlData.publicUrl);
+      }
+      // 2. Upload video if any
+      let videoUrl = "";
+      if (videoFile) {
+        const vPath = `${user.id}/${stamp}-video.${videoFile.name.split(".").pop()}`;
+        const { error: vErr } = await supabase.storage.from("property-videos").upload(vPath, videoFile, { upsert: true });
+        if (vErr) throw new Error("Video upload failed: " + vErr.message);
+        const { data: vUrl } = supabase.storage.from("property-videos").getPublicUrl(vPath);
+        videoUrl = vUrl.publicUrl;
+      }
+      // 3. Expiry based on package
+      let days = 30;
+      if (paidPackage?.name === "5 Day Free") days = 5;
+      if (paidPackage?.name === "Premium Video") days = 60;
+      if (paidPackage?.name === "COMBO") days = 74;
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+      // 4. Insert property - This is what makes it appear on Homepage + My Office
+      const { error: insertErr } = await supabase.from("properties").insert([{
+        title: title.trim(),
+        price: Number(propPrice.replace(/[^0-9]/g, "")) || 0,
+        location: location.trim(),
+        city: location.trim(),
+        description: description.trim(),
+        images: imageUrls,
+        image_url: imageUrls[0] || "",
+        video_url: videoUrl || null,
+        agent_name: agentName.trim() || "Agent",
+        user_id: user.id,
+        agent_id: user.id,
+        whatsapp_number: agentPhone.trim(),
+        plan_type: paidPackage?.type || "static",
+        plan_name: paidPackage?.name || "",
+        expires_at: expiresAt,
+        likes_count: 0,
+      }]);
+      if (insertErr) throw insertErr;
+
+      // Clear paid package so next upload needs new payment
+      localStorage.removeItem("paid_package");
+      alert(`✅ Published! ${paidPackage?.name} - Your property is now LIVE on Homepage and in Your My Office.`);
       window.location.href = "/agent-dashboard";
-    }, 1000);
+    } catch (e: any) {
+      alert("Publish failed: " + e.message);
+    }
+    setUploading(false);
   };
 
   return (
@@ -241,7 +311,7 @@ export default function UploadPage() {
                 {videoError && <p className="text-[11px] mt-1 text-red-600 font-bold">{videoError}</p>}
               </div>
             )}
-            <button onClick={handlePublish} disabled={uploading} className="w-full bg-[#7C3AED] text-white h-[48px] rounded-full font-black mt-5 disabled:opacity-50">{uploading ? "Publishing..." : `Publish ${paidPackage?.name} Listing →`}</button>
+            <button onClick={handlePublish} disabled={uploading} className="w-full bg-[#7C3AED] text-white h-[48px] rounded-full font-black mt-5 disabled:opacity-50">{uploading ? "Publishing... Uploading Pictures..." : `Publish ${paidPackage?.name} Listing →`}</button>
             <button onClick={() => { localStorage.removeItem("paid_package"); setPaid(false); setPaidPackage(null); }} className="w-full text-center mt-3 text-[12px] text-blue-600 font-bold underline">Change Package / Pay for Another</button>
           </>
         )}

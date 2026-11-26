@@ -10,6 +10,7 @@ export default function AgentDashboard() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [myReferralCode, setMyReferralCode] = useState("");
   const [stats, setStats] = useState({ totalProperties: 0, totalViews: 0, totalLikes: 0, level1: 0, level2: 0, level3: 0, earnings: 0 });
   const [myProperties, setMyProperties] = useState<any[]>([]);
 
@@ -25,6 +26,10 @@ export default function AgentDashboard() {
 
   const loadDashboard = async (userId: string) => {
     try {
+      // ===== FIX 1: Get REAL referral code from agent_profiles =====
+      const { data: profile } = await supabase.from("agent_profiles").select("referral_code").eq("id", userId).single();
+      if (profile?.referral_code) setMyReferralCode(profile.referral_code);
+
       const { data: props } = await supabase.from("properties").select("*").eq("user_id", userId).order("id", { ascending: false });
       if (props) {
         setMyProperties(props);
@@ -32,14 +37,16 @@ export default function AgentDashboard() {
         const likes = props.reduce((a: number, p: any) => a + (Number(p.likes_count || 0)), 0);
         setStats((prev) => ({ ...prev, totalProperties: props.length, totalViews: views, totalLikes: likes }));
       }
-      // Referrals - replace table name with yours if different
+
+      // ===== FIX 2: Real earnings from referrals table =====
+      // Your referrals table should have: level, amount / commission / earning
+      // If it has amount, we sum it. If not, earnings stays 0 but counts are real.
       const { data: refs } = await supabase.from("referrals").select("*").eq("referrer_id", userId);
       if (refs) {
         const l1 = refs.filter((r: any) => r.level === 1).length;
         const l2 = refs.filter((r: any) => r.level === 2).length;
         const l3 = refs.filter((r: any) => r.level === 3).length;
-        // Example: 10% L1, 5% L2, 3% L3 - adjust to your real earning logic
-        const earnings = (l1 * 0) + (l2 * 0) + (l3 * 0);
+        const earnings = refs.reduce((sum: number, r: any) => sum + Number(r.amount || r.commission || r.earning || r.earnings || 0), 0);
         setStats((prev) => ({ ...prev, level1: l1, level2: l2, level3: l3, earnings }));
       }
     } catch {}
@@ -64,11 +71,18 @@ export default function AgentDashboard() {
     await supabase.auth.signOut();
     setUser(null);
     setMyProperties([]);
+    setMyReferralCode("");
+  };
+
+  const copyReferralLink = () => {
+    const code = myReferralCode || user?.id;
+    const link = `https://mypropertydot.com/signup?ref=${code}`;
+    navigator.clipboard.writeText(link);
+    alert(`Your referral link copied ✅\nCode: ${code}\n${link}`);
   };
 
   if (loading) return <main className="min-h-screen flex items-center justify-center">Loading Dashboard...</main>;
 
-  // ===== 1. NOT LOGGED IN - ASK FOR LOGIN DETAILS FIRST =====
   if (!user) {
     return (
       <main className="min-h-screen bg-[#f8f8f8] flex items-center justify-center p-4">
@@ -100,7 +114,6 @@ export default function AgentDashboard() {
     );
   }
 
-  // ===== 2. LOGGED IN - SHOW DASHBOARD =====
   return (
     <main className="min-h-screen bg-[#f8f8f8]">
       <header className="bg-white sticky top-0 z-40 shadow-sm">
@@ -116,6 +129,15 @@ export default function AgentDashboard() {
       <div className="max-w-[1100px] mx-auto p-4">
         <h1 className="font-black text-[22px]">Welcome back, Agent 👋</h1>
         <p className="text-[13px] text-gray-500">This is your private dashboard. Only you can see this.</p>
+
+        {/* Referral Code Display - NEW */}
+        {myReferralCode && (
+          <div className="bg-purple-100 border border-purple-300 rounded-2xl p-4 mt-4 text-center">
+            <p className="text-[12px] font-bold text-purple-700">YOUR REFERRAL CODE</p>
+            <p className="font-black text-[24px] tracking-widest">{myReferralCode}</p>
+            <p className="text-[11px] text-gray-500">Share this code — anyone who signs up with it earns you money</p>
+          </div>
+        )}
 
         <div className="bg-black text-white rounded-2xl p-4 mt-4 overflow-hidden">
           <p className="text-[12px] text-yellow-400 font-black">💰 YOUR REFERRAL EARNINGS</p>
@@ -133,7 +155,7 @@ export default function AgentDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           <Link href="/upload" className="bg-black text-white rounded-xl p-4 text-center font-black text-[13px]">+ Post Property</Link>
           <Link href={`/my-office/${user.id}`} className="bg-white rounded-xl p-4 text-center font-black text-[13px] border">View My Office →</Link>
-          <button onClick={() => { navigator.clipboard.writeText(`https://mypropertydot.com/signup?ref=${user.id}`); alert("Your referral link copied ✅"); }} className="bg-yellow-400 rounded-xl p-4 text-center font-black text-[13px]">Copy My Referral Link 🔗</button>
+          <button onClick={copyReferralLink} className="bg-yellow-400 rounded-xl p-4 text-center font-black text-[13px]">Copy My Referral Link 🔗</button>
           <Link href="/" className="bg-white rounded-xl p-4 text-center font-black text-[13px] border">Homepage</Link>
         </div>
 
