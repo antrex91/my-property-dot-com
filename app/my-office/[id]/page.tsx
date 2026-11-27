@@ -16,14 +16,23 @@ export default function MyOfficePage() {
   const [comment, setComment] = useState('')
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
   const fileRef = useRef<any>(null)
+
+  useEffect(() => {
+    const checkOwner = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user?.id === agentId) setIsOwner(true)
+    }
+    checkOwner()
+  }, [agentId])
 
   useEffect(() => {
     const load = async () => {
       if (!agentId) return
       let profile: any = null
       try {
-        const { data } = await supabase.from('agent_profiles').select('*').eq('id', agentId).single()
+        const { data } = await supabase.from('agent_profiles').select('name,location,why_deal,avatar_url,phone,whatsapp').eq('id', agentId).single()
         if (data) profile = data
       } catch {}
       let properties: any[] = []
@@ -58,7 +67,6 @@ export default function MyOfficePage() {
     load()
   }, [agentId])
 
-  // --- COMPRESSOR - shrinks big photos before upload ---
   const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -71,10 +79,7 @@ export default function MyOfficePage() {
           const MAX = 800
           let w = img.width
           let h = img.height
-          if (w > MAX) {
-            h = (h * MAX) / w
-            w = MAX
-          }
+          if (w > MAX) { h = (h * MAX) / w; w = MAX }
           canvas.width = w
           canvas.height = h
           const ctx = canvas.getContext('2d')
@@ -91,25 +96,20 @@ export default function MyOfficePage() {
     })
   }
 
-  // --- FACEBOOK STYLE CHANGE PICTURE + COMPRESSOR ---
   const changePicture = async (e: any) => {
+    if (!isOwner) { alert('Only the owner of this office can change this picture'); if(e.target) e.target.value=''; return }
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     try {
-      // 1. Compress first - makes it small and fast
       const compressed = await compressImage(file)
       const fileName = `${agentId}-${Date.now()}.jpg`
-      // 2. Upload compressed version to Supabase Storage
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressed, { contentType: 'image/jpeg', upsert: true })
       if (uploadError) throw uploadError
-      // 3. Get public link
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName)
       const publicUrl = urlData.publicUrl
-      // 4. Save link to database
       const { error: dbError } = await supabase.from('agent_profiles').update({ avatar_url: publicUrl }).eq('id', agentId)
       if (dbError) throw dbError
-      // 5. Show it immediately
       setAgent((prev: any) => ({ ...prev, avatar: publicUrl }))
       alert('Profile picture changed 💜')
     } catch (err: any) {
@@ -156,23 +156,25 @@ export default function MyOfficePage() {
           <Link href="/" className="text-white/80 text-sm">← Back to Home</Link>
           <div className="flex items-center gap-4 mt-6">
             <div className="relative">
-              <button onClick={() => fileRef.current?.click()} className="block">
+              <button onClick={() => { if(isOwner) fileRef.current?.click() }} className="block">
                 {agent.avatar ? (
                   <img src={agent.avatar} className="w-[90px] h-[90px] rounded-full object-cover border-4 border-white shadow-lg" alt="" />
                 ) : (
                   <div className="w-[90px] h-[90px] rounded-full bg-white flex items-center justify-center text-4xl shadow-lg">💜</div>
                 )}
               </button>
-              <button onClick={() => fileRef.current?.click()} className="absolute -bottom-1 -right-1 bg-white text-black text-xs font-bold w-[28px] h-[28px] rounded-full shadow flex items-center justify-center border">
-                📷
-              </button>
+              {isOwner && (
+                <button onClick={() => fileRef.current?.click()} className="absolute -bottom-1 -right-1 bg-white text-black text-xs font-bold w-[28px] h-[28px] rounded-full shadow flex items-center justify-center border">
+                  📷
+                </button>
+              )}
               <input ref={fileRef} type="file" accept="image/*" onChange={changePicture} className="hidden" />
             </div>
             <div>
               <h1 className="text-2xl font-black">{agent.name} 💜</h1>
               <p className="text-white/90 text-sm">📍 {agent.location}</p>
               <p className="bg-white text-purple-600 text-xs font-bold px-3 py-1 rounded-full inline-block mt-2">⭐ {avgStars} / 5 • {ratings.length} Ratings • 🏠 {props.length} Properties</p>
-              <p className="text-white/90 text-xs mt-2">{uploading ? 'Compressing & Uploading picture...' : 'Tap picture to change it 📷'}</p>
+              <p className="text-white/90 text-xs mt-2">{uploading ? 'Compressing & Uploading picture...' : isOwner ? 'Tap picture to change it 📷' : ''}</p>
             </div>
           </div>
         </div>
@@ -188,14 +190,11 @@ export default function MyOfficePage() {
           🤖 Check My AI Chat Progress →
         </Link>
 
-        {/* ===== AGENT DASHBOARD BUTTON - INSIDE MY-OFFICE, UNDER CHAT PROGRESS ===== */}
-        {/* Click → Goes to /agent-dashboard → Asks for Login Details First → Then Opens Dashboard */}
         <Link href="/agent-dashboard" className="block text-center bg-[#1e293b] text-white h-[52px] leading-[52px] rounded-full font-black mt-3 shadow-lg border-2 border-yellow-400">
           🔐 Agent Dashboard →
         </Link>
         <p className="text-center text-[11px] text-gray-500 mt-1">Private — Only the owner of this office can login to see earnings & dashboard</p>
 
-        {/* ===== HOW YOU EARN - 10% / 5% / 3% ===== */}
         <div className="bg-white rounded-[24px] p-5 mt-4 shadow-sm border-2 border-yellow-300">
           <p className="text-[11px] tracking-[0.3em] text-purple-500 font-black">💰 HOW YOU EARN — 3 LEVELS</p>
           <p className="mt-2 text-[14px] leading-relaxed">You earn when your downline <b>subscribes & uploads</b>. You don't have to wait for someone to buy or rent first.</p>

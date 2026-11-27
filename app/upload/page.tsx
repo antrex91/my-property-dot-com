@@ -44,8 +44,15 @@ export default function UploadPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoError, setVideoError] = useState("");
   const [uploading, setUploading] = useState(false);
+  // NEW: Cover Picture = YouTube Thumbnail for this property
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState("");
+  // NEW: Why deal with me - goes to My Office wall
+  const [whyDeal, setWhyDeal] = useState("");
+  const [showWhyHelp, setShowWhyHelp] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const visiblePackages = hasUsedFree ? PACKAGES.filter(p => p.name !== "5 Day Free") : PACKAGES;
 
   useEffect(() => {
@@ -65,13 +72,13 @@ export default function UploadPage() {
       setPaidPackage(p);
       setSelected(p);
     }
-    // Load real logged-in agent
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
         setAgentEmail(data.user.email || "");
-        supabase.from("agent_profiles").select("name,phone").eq("id", data.user.id).single().then(({ data: prof }: any) => {
+        supabase.from("agent_profiles").select("name,phone,why_deal").eq("id", data.user.id).single().then(({ data: prof }: any) => {
           if (prof?.name) setAgentName(prof.name);
           if (prof?.phone) setAgentPhone(prof.phone);
+          if (prof?.why_deal) setWhyDeal(prof.why_deal);
         });
       }
     });
@@ -93,7 +100,6 @@ export default function UploadPage() {
   };
 
   const handlePay = async () => {
-    // FIXED: Use real Supabase user, not localStorage agent_id
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { alert("Please Sign Up / Login as Agent first"); window.location.href = "/signup"; return; }
     const buyerId = user.id;
@@ -143,6 +149,14 @@ export default function UploadPage() {
   const canUploadImages = paidPackage?.type === "static" || paidPackage?.type === "combo";
   const canUploadVideo = paidPackage?.type === "video" || paidPackage?.type === "combo";
 
+  const handleCoverPick = (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("video/")) { alert("❌ Cover Picture must be a picture, not video."); return; }
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
   const handleImagePick = (e: any) => {
     if (!canUploadImages) { alert(`❌ You paid for ${paidPackage?.name} - VIDEO only, not pictures.`); return; }
     const files = Array.from(e.target.files) as File[];
@@ -170,9 +184,9 @@ export default function UploadPage() {
     v.src = url;
   };
 
-  // ===== FIXED: REAL PUBLISH - Uploads to Supabase + Inserts into properties =====
   const handlePublish = async () => {
     if (!title.trim() || !propPrice.trim() || !location.trim()) { alert("Fill Title, Price, Location"); return; }
+    if (!coverFile) { alert("❌ Please upload Cover Picture first — this is the thumbnail clients see first on Homepage, like YouTube."); return; }
     if (canUploadImages && images.length === 0 && !canUploadVideo) { alert("Select pictures to upload"); return; }
     if (canUploadVideo && !videoFile && paidPackage?.type === "video") { alert("Select video to upload"); return; }
 
@@ -182,7 +196,14 @@ export default function UploadPage() {
     setUploading(true);
     try {
       const stamp = Date.now();
-      // 1. Upload images
+      // 1. Upload COVER first - this is the thumbnail
+      const coverPath = `${user.id}/${stamp}-cover.${coverFile.name.split(".").pop()}`;
+      const { error: coverErr } = await supabase.storage.from("property-images").upload(coverPath, coverFile, { upsert: true });
+      if (coverErr) throw new Error("Cover Picture upload failed: " + coverErr.message);
+      const { data: coverUrlData } = supabase.storage.from("property-images").getPublicUrl(coverPath);
+      const coverUrl = coverUrlData.publicUrl;
+
+      // 2. Upload sliding images
       const imageUrls: string[] = [];
       for (let i = 0; i < images.length; i++) {
         const file = images[i];
@@ -192,7 +213,7 @@ export default function UploadPage() {
         const { data: urlData } = supabase.storage.from("property-images").getPublicUrl(path);
         imageUrls.push(urlData.publicUrl);
       }
-      // 2. Upload video if any
+      // 3. Upload video if any
       let videoUrl = "";
       if (videoFile) {
         const vPath = `${user.id}/${stamp}-video.${videoFile.name.split(".").pop()}`;
@@ -201,14 +222,14 @@ export default function UploadPage() {
         const { data: vUrl } = supabase.storage.from("property-videos").getPublicUrl(vPath);
         videoUrl = vUrl.publicUrl;
       }
-      // 3. Expiry based on package
+      // 4. Expiry
       let days = 30;
       if (paidPackage?.name === "5 Day Free") days = 5;
       if (paidPackage?.name === "Premium Video") days = 60;
       if (paidPackage?.name === "COMBO") days = 74;
       const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-      // 4. Insert property - This is what makes it appear on Homepage + My Office
+      // 5. Insert property - cover_url is thumbnail for Homepage feed
       const { error: insertErr } = await supabase.from("properties").insert([{
         title: title.trim(),
         price: Number(propPrice.replace(/[^0-9]/g, "")) || 0,
@@ -216,7 +237,9 @@ export default function UploadPage() {
         city: location.trim(),
         description: description.trim(),
         images: imageUrls,
-        image_url: imageUrls[0] || "",
+        image_url: coverUrl,
+        cover_image: coverUrl,
+        cover_url: coverUrl,
         video_url: videoUrl || null,
         agent_name: agentName.trim() || "Agent",
         user_id: user.id,
@@ -229,9 +252,13 @@ export default function UploadPage() {
       }]);
       if (insertErr) throw insertErr;
 
-      // Clear paid package so next upload needs new payment
+      // 6. Save Why Deal to My Office wall
+      if (whyDeal.trim()) {
+        await supabase.from("agent_profiles").update({ why_deal: whyDeal.trim() }).eq("id", user.id);
+      }
+
       localStorage.removeItem("paid_package");
-      alert(`✅ Published! ${paidPackage?.name} - Your property is now LIVE on Homepage and in Your My Office.`);
+      alert(`✅ Published! ${paidPackage?.name} - Cover Picture + Why Deal saved. Your property is now LIVE on Homepage and in Your My Office.`);
       window.location.href = "/agent-dashboard";
     } catch (e: any) {
       alert("Publish failed: " + e.message);
@@ -294,6 +321,33 @@ export default function UploadPage() {
             <input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Wuse 2, Abuja" className="w-full border-2 border-[#d8b4fe] rounded-xl p-3 mt-1 text-[13px] outline-none bg-white" />
             <label className="block text-[13px] font-bold mt-3">Description</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe property..." className="w-full border-2 border-[#d8b4fe] rounded-xl p-3 mt-1 text-[13px] outline-none bg-white h-[80px]" />
+
+            {/* COVER PICTURE - YouTube Thumbnail */}
+            <div className="mt-4 bg-yellow-50 border-2 border-yellow-300 rounded-xl p-3">
+              <label className="block text-[13px] font-black">🖼️ Cover Picture — Thumbnail *</label>
+              <p className="text-[11px] text-gray-600 mt-1">This is what clients see FIRST on Homepage feed, like YouTube thumbnail. Pick your best, clearest picture.</p>
+              <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverPick} />
+              <button type="button" onClick={() => coverInputRef.current?.click()} className="w-full border-2 border-dashed border-yellow-500 bg-white rounded-xl p-4 text-[13px] font-bold text-yellow-800 mt-2">
+                {coverFile ? `✅ Cover Selected: ${coverFile.name} — Tap to change` : "📸 Tap to Upload Cover Picture"}
+              </button>
+              {coverPreview && <img src={coverPreview} className="w-full h-[180px] object-cover rounded-xl mt-2 border" alt="Cover preview" />}
+            </div>
+
+            {/* WHY DEAL WITH ME */}
+            <div className="mt-4">
+              <label className="block text-[13px] font-bold">
+                💜 Why should clients deal with you?
+                <button type="button" onClick={() => setShowWhyHelp(!showWhyHelp)} className="ml-1 bg-purple-100 text-purple-700 w-[20px] h-[20px] rounded-full text-[12px] font-black">?</button>
+              </label>
+              {showWhyHelp && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 mt-1 text-[12px] leading-relaxed">
+                  <b>💜 Why answer this?</b><br/>
+                  This answer goes straight to your My Office wall under "WHY YOU SHOULD DEAL WITH ME". Clients read it before they call you. Write why you are trusted — e.g. you show real documents, no fake pictures, you follow client until they collect keys. Good answer = more calls. You can update it anytime you upload again.
+                </div>
+              )}
+              <textarea value={whyDeal} onChange={e => setWhyDeal(e.target.value)} placeholder="e.g. I only post real properties I have inspected. No fake pictures, no hidden charges. I will show you and stay with you till you collect keys." className="w-full border-2 border-[#d8b4fe] rounded-xl p-3 mt-1 text-[13px] outline-none bg-white h-[80px]" />
+            </div>
+
             <p className="font-bold text-[13px] mt-4">Step 2: Upload Files for {paidPackage?.name}</p>
             <p className="text-[11px] text-gray-500">System will compress video maximally and set duration to {paidPackage?.duration}</p>
             {canUploadImages && (
