@@ -290,7 +290,6 @@ export default function Home() {
   const bannerEndDate = new Date("2027-01-06");
   const showBanner = new Date() < bannerEndDate;
 
-  // FIXED: Close States when clicking outside - this makes 2nd click + outside click close it
   useEffect(()=>{
     if(!showStates) return;
     const onClick = (e:any)=>{
@@ -483,8 +482,16 @@ export default function Home() {
     setShowPicker(null);
     try { await supabase.from("comments").insert({ property_id: pidStr, name:"You", text:textToSave }); } catch(e){ console.log("comment save failed", e); }
   };
-  const getImg = (p:any) => p?.images?.[0] || p?.image_url || FALLBACK_IMG;
-  const getAllImgs = (p:any) => p?.images?.length? p.images : (p?.image_url? [p.image_url] : [FALLBACK_IMG]);
+  // FIXED: Cover Picture first - YouTube thumbnail
+  const getImg = (p:any) => p?.cover_image || p?.cover_url || p?.image_url || p?.images?.[0] || FALLBACK_IMG;
+  const getAllImgs = (p:any) => {
+    const cover = p?.cover_image || p?.cover_url || p?.image_url;
+    if (cover) {
+      const rest = (p?.images || []).filter((im:any) => im !== cover);
+      return [cover, ...rest];
+    }
+    return p?.images?.length ? p.images : [FALLBACK_IMG];
+  };
   const getTotalSlides = (p:any) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc ? imgs.length + 1 : imgs.length; };
   const isDescSlide = (p:any, idx:number) => { const imgs = getAllImgs(p); const hasDesc = p?.description && String(p.description).trim().length > 0; const isStatic = !p?.video_url; return isStatic && hasDesc && idx === imgs.length; };
   return (
@@ -509,9 +516,7 @@ export default function Home() {
           </div>
           <Link href="/upload" className="shrink-0 bg-black hover:bg-[#7C3AED] text-white h-[32px] px-4 rounded-full text-[12px] font-black flex items-center justify-center whitespace-nowrap transition">+ Post Property</Link>
         </div>
-        {/* ===== FILTER ROW - FIXED: overflow-visible so States dropdown is NOT cut off ===== */}
         <div className="max-w-[1400px] mx-auto px-4 pb-3 flex items-center gap-2 flex-nowrap overflow-visible">
-          {/* ===== STATES - FIXED: Hover = blue + open, Click 1 = lock, Click 2 = close, Click outside = close ===== */}
           <div ref={statesRef} className="relative shrink-0" onMouseEnter={()=>setShowStates(true)} onMouseLeave={()=>{ if(!statesPinned) setShowStates(false); }}>
             <button onClick={()=>{ if(showStates){ setShowStates(false); setStatesPinned(false); } else { setShowStates(true); setStatesPinned(true); } }} className={`h-[32px] px-4 rounded-lg text-[13px] font-medium flex items-center gap-1 whitespace-nowrap transition ${showStates || filter!=="All" ? "bg-blue-600 text-white" : "bg-[#f2f2f2] hover:bg-blue-600 hover:text-white"}`}>
               {filter==="All" ? "States" : filter} <span className="text-[10px]">{showStates ? "▲" : "▼"}</span>
@@ -588,7 +593,7 @@ export default function Home() {
           return (
           <div key={gi} className="space-y-6">
             {group.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {group.map((p:any)=>{
                 const imgs = getAllImgs(p);
                 const totalSlides = getTotalSlides(p);
@@ -601,7 +606,7 @@ export default function Home() {
                 const pComments = comments[p.id.toString()] || [];
                 return (
                 <div key={p.id} className="bg-white rounded-xl overflow-hidden hover:shadow-[0_2px_12px_rgba(0,0,0,0.12)] transition flex flex-col">
-                  <div className="relative aspect-[16/9] bg-[#f2f2f2] cursor-pointer group overflow-hidden">
+                  <div className="relative aspect-[16/9] bg-[#f2f2f2] cursor-pointer group overflow-hidden rounded-xl">
                     {showDescSlide ? (
                       <div onClick={()=>{setSelected(p); setImgIdx(cIdx);}} className="w-full h-full bg-[#F5F0FF] p-3 overflow-hidden flex flex-col">
                         <p className="text-[11px] font-black text-purple-700">📝 Description</p>
@@ -622,7 +627,7 @@ export default function Home() {
                     <button onClick={(e)=>{e.stopPropagation(); setFollowed(pr=>({...pr,[p.id]:!pr[p.id]}))}} className={`absolute top-2 right-2 px-2.5 py-1 rounded-full text-[9px] font-bold shadow transition ${followed[p.id]?"bg-white text-black":"bg-[#f2f2f2] hover:bg-blue-600 hover:text-white text-black"}`}>{followed[p.id]?"Following ✓":"+ Follow"}</button>
                   </div>
                   <div className="p-3 flex-1 flex flex-col">
-                    <h3 className="font-medium text-[13px] leading-[1.3] line-clamp-2 cursor-pointer" onClick={()=>{setSelected(p); setImgIdx(cIdx);}}>{p.title} - {p.location}</h3>
+                    <h3 className="font-bold text-[15px] sm:text-[13px] leading-[1.3] line-clamp-2 cursor-pointer" onClick={()=>{setSelected(p); setImgIdx(cIdx);}}>{p.title} - {p.location}</h3>
                     <p className="text-[11px] text-gray-500 mt-1">📍 {p.location} • {formatPrice(p.price)} • {getBeds(p) ? `${getBeds(p)} Bed` : ""} • {getType(p)}</p>
                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
                       <div className="w-8 h-8 rounded-full bg-[#0A1931] text-white flex items-center justify-center text-[12px] font-black">{agentName ? agentName[0].toUpperCase() : "A"}</div>
